@@ -1,0 +1,11 @@
+estimation_id,epic_id,dev_hours,qa_hours,total_hours,total_story_points,complexity,risk_level,estimation_method,confidence_level,estimated_by,estimation_date,notes
+EST-001,EPIC-001,240,80,320,89,High,Medium,Planning Poker,High,tech.lead@company.com,2025-01-12,Includes OAuth2 implementation and security hardening
+EST-002,EPIC-002,320,120,440,144,High,High,T-Shirt Sizing,Medium,senior.architect@company.com,2025-01-28,PCI compliance requirements add complexity
+EST-003,EPIC-003,200,60,260,72,Medium,Low,Planning Poker,High,emily.white@company.com,2025-02-22,Standard notification patterns with proven providers
+EST-004,EPIC-004,280,100,380,110,High,Medium,Story Point Estimation,High,tom.baker@company.com,2025-01-16,Elasticsearch expertise required
+EST-005,EPIC-005,360,140,500,165,High,High,Planning Poker,Medium,robert.taylor@company.com,2025-01-29,Multiple integration points increase risk
+EST-006,EPIC-006,220,80,300,89,Medium,Low,T-Shirt Sizing,Medium,analytics.lead@company.com,2025-02-28,Dependent on data warehouse readiness
+EST-007,EPIC-007,180,60,240,68,Medium,High,Expert Judgment,Medium,devops.lead@company.com,2025-02-08,Migration risk requires careful rollout
+EST-008,EPIC-008,300,100,400,118,High,Medium,Planning Poker,High,mobile.lead@company.com,2025-01-20,GraphQL expertise available in team
+EST-009,EPIC-009,340,120,460,136,High,Medium,Story Point Estimation,Medium,warehouse.mgr@company.com,2025-02-26,Complex warehouse workflows
+EST-010,EPIC-010,160,40,200,55,Medium,Medium,Expert Judgment,High,devops.lead@company.com,2025-01-26,Building on existing CI/CD knowledge
