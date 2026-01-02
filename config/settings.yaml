@@ -1,0 +1,36 @@
+# AI Impact Assessment System Configuration
+
+application:
+  name: AI Impact Assessment System
+  version: 1.0.0
+  environment: development
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:5173
+
+ollama:
+  base_url: http://localhost:11434
+  generation_model: phi3:mini
+  embedding_model: all-minilm
+  timeout_seconds: 120
+  temperature: 0.3
+  max_tokens: 2048
+
+chromadb:
+  persist_dir: ./data/chroma
+  collection_prefix: impact_assessment
+
+search:
+  semantic_weight: 0.70
+  keyword_weight: 0.30
+  max_results: 10
+  min_score_threshold: 0.3
+
+paths:
+  raw_data: ./data/raw
+  uploads: ./data/uploads
+  sessions: ./data/sessions
