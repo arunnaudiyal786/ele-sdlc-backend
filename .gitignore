@@ -40,3 +40,6 @@ output/*.png
 logs/
 
 ./claude
+
+output/
+data/sessions/

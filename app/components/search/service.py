@@ -1,3 +1,4 @@
+import json
 import time
 from typing import List, Dict
 from app.components.base.component import BaseComponent
@@ -73,6 +74,7 @@ class SearchService(BaseComponent[SearchRequest, SearchResponse]):
     def _convert_to_match_result(self, result: Dict) -> MatchResult:
         """Convert raw search result to MatchResult."""
         metadata = result.get("metadata", {})
+        technologies = self._parse_list_field(metadata.get("technologies", []))
         return MatchResult(
             match_id=result.get("id", ""),
             epic_id=metadata.get("epic_id", ""),
@@ -80,7 +82,27 @@ class SearchService(BaseComponent[SearchRequest, SearchResponse]):
             description=result.get("text", "")[:500],
             match_score=result.get("final_score", 0.0),
             score_breakdown=result.get("score_breakdown", {}),
-            technologies=metadata.get("technologies", []),
+            technologies=technologies,
             actual_hours=metadata.get("actual_hours"),
             estimated_hours=metadata.get("estimated_hours"),
         )
+
+    def _parse_list_field(self, value) -> List[str]:
+        """Parse a list field that may be stored as a string."""
+        if isinstance(value, list):
+            return value
+        if not isinstance(value, str):
+            return []
+        # Try JSON parsing (handles double-quoted strings)
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            pass
+        # Handle Python-style single quotes by replacing with double quotes
+        try:
+            normalized = value.replace("'", '"')
+            parsed = json.loads(normalized)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            return []

@@ -138,6 +138,54 @@ ollama pull phi3:mini
 curl http://localhost:11434/api/tags
 ```
 
+### Testing Ollama Server
+
+Use these commands to verify Ollama is functioning correctly:
+
+#### List Available Models
+
+```bash
+curl http://localhost:11434/api/tags | jq '.models[].name'
+```
+
+#### Send a Test Query
+
+```bash
+curl -X POST http://localhost:11434/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi3:mini",
+    "prompt": "Say hello in one word",
+    "stream": false
+  }'
+```
+
+#### Test JSON Format Output (Used by Backend)
+
+```bash
+curl -X POST http://localhost:11434/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "phi3:mini",
+    "prompt": "Return a JSON object with name and age fields for a person named John who is 30",
+    "format": "json",
+    "stream": false
+  }'
+```
+
+#### Test Embedding Model
+
+```bash
+curl -X POST http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "all-minilm",
+    "prompt": "Test embedding generation"
+  }'
+```
+
+> **Note**: Use `stream: false` for simpler testing (returns complete response). Use `format: "json"` to force JSON output, which is how the backend agents work.
+
 ---
 
 ## Initialize Vector Database

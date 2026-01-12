@@ -1,6 +1,6 @@
 {
-  "session_id": "api-modernization-001",
-  "requirement_text": "Refactor the legacy SOAP-based Customer API to a RESTful microservices architecture. The new API should support JSON payloads, implement OAuth 2.0 authentication, use pagination for large datasets, and include comprehensive OpenAPI documentation. The migration must maintain backward compatibility for existing clients during a 6-month transition period. Key deliverables include: (1) Design new RESTful endpoint structure following industry best practices, (2) Implement token-based authentication with refresh token support, (3) Create API versioning strategy to support v1 and v2 endpoints simultaneously, (4) Build rate limiting and throttling mechanisms, (5) Develop comprehensive integration tests, and (6) Create migration guides for client teams.",
+  "session_id": "api-modernization-003",
+  "requirement_text": "Refactor the legacy SOAP-based Customer API to a RESTful microservices architecture. The new API should support JSON payloads, implement OAuth 2.0 authentication, use pagination for large datasets, and include comprehensive OpenAPI documentation.",
   "jira_epic_id": "SDLC-5001",
   "selected_matches": []
 }

@@ -6,11 +6,11 @@ from datetime import datetime
 class RiskItem(BaseModel):
     """Single risk with mitigation."""
     title: str
-    description: str
-    severity: str = Field(..., pattern="^(HIGH|MEDIUM|LOW)$")
-    likelihood: str = Field(..., pattern="^(HIGH|MEDIUM|LOW)$")
-    category: str
-    mitigation: str
+    description: str = ""
+    severity: str = "MEDIUM"
+    likelihood: str = "MEDIUM"
+    category: str = "Technical"
+    mitigation: str = ""
 
 
 class RisksRequest(BaseModel):
