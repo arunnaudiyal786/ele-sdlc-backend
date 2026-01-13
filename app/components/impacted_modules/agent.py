@@ -1,23 +1,23 @@
 from typing import Dict, Any
-from .service import ModulesService
-from .models import ModulesRequest
+from .service import ImpactedModulesService
+from .models import ImpactedModulesRequest
 
-_service: ModulesService | None = None
+_service: ImpactedModulesService | None = None
 
 
-def get_service() -> ModulesService:
+def get_service() -> ImpactedModulesService:
     global _service
     if _service is None:
-        _service = ModulesService()
+        _service = ImpactedModulesService()
     return _service
 
 
-async def modules_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for modules identification."""
+async def impacted_modules_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for impacted modules identification."""
     try:
         service = get_service()
 
-        request = ModulesRequest(
+        request = ImpactedModulesRequest(
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
@@ -26,12 +26,12 @@ async def modules_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         response = await service.process(request)
 
         return {
-            "modules_output": response.model_dump(),
-            "status": "modules_generated",
-            "current_agent": "effort",
+            "impacted_modules_output": response.model_dump(),
+            "status": "impacted_modules_generated",
+            "current_agent": "estimation_effort",
             "messages": [
                 {
-                    "role": "modules",
+                    "role": "impacted_modules",
                     "content": f"Identified {response.total_modules} impacted modules",
                 }
             ],

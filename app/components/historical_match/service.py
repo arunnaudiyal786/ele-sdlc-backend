@@ -5,11 +5,11 @@ from app.components.base.component import BaseComponent
 from app.components.base.config import get_settings
 from app.rag.hybrid_search import HybridSearchService
 from app.utils.audit import AuditTrailManager
-from .models import SearchRequest, SearchResponse, MatchResult, MatchSelectionRequest, MatchSelectionResponse
+from .models import HistoricalMatchRequest, HistoricalMatchResponse, MatchResult, MatchSelectionRequest, MatchSelectionResponse
 
 
-class SearchService(BaseComponent[SearchRequest, SearchResponse]):
-    """Hybrid search service as a component."""
+class HistoricalMatchService(BaseComponent[HistoricalMatchRequest, HistoricalMatchResponse]):
+    """Historical match service as a component."""
 
     def __init__(self):
         self.hybrid_search = HybridSearchService.get_instance()
@@ -17,10 +17,10 @@ class SearchService(BaseComponent[SearchRequest, SearchResponse]):
 
     @property
     def component_name(self) -> str:
-        return "search"
+        return "historical_match"
 
-    async def process(self, request: SearchRequest) -> SearchResponse:
-        """Execute hybrid search."""
+    async def process(self, request: HistoricalMatchRequest) -> HistoricalMatchResponse:
+        """Execute hybrid search for historical matches."""
         start = time.time()
 
         results = await self.hybrid_search.search(
@@ -37,18 +37,18 @@ class SearchService(BaseComponent[SearchRequest, SearchResponse]):
         # Save to audit trail
         audit = AuditTrailManager(request.session_id)
         audit.save_json(
-            "search_request.json",
+            "historical_match_request.json",
             request.model_dump(),
-            subfolder="step2_search",
+            subfolder="step2_historical_match",
         )
         audit.save_json(
             "all_matches.json",
             [m.model_dump() for m in matches],
-            subfolder="step2_search",
+            subfolder="step2_historical_match",
         )
-        audit.record_timing("search", elapsed_ms)
+        audit.record_timing("historical_match", elapsed_ms)
 
-        return SearchResponse(
+        return HistoricalMatchResponse(
             session_id=request.session_id,
             total_matches=len(matches),
             matches=matches,
@@ -61,7 +61,7 @@ class SearchService(BaseComponent[SearchRequest, SearchResponse]):
         audit.save_json(
             "selected_matches.json",
             {"selected_ids": request.selected_match_ids},
-            subfolder="step2_search",
+            subfolder="step2_historical_match",
         )
         audit.add_step_completed("matches_selected")
 

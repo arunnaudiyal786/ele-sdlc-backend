@@ -1,26 +1,26 @@
 from typing import Dict, Any
-from .service import SearchService
-from .models import SearchRequest
+from .service import HistoricalMatchService
+from .models import HistoricalMatchRequest
 
-_service: SearchService | None = None
+_service: HistoricalMatchService | None = None
 
 
-def get_service() -> SearchService:
+def get_service() -> HistoricalMatchService:
     global _service
     if _service is None:
-        _service = SearchService()
+        _service = HistoricalMatchService()
     return _service
 
 
-async def search_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for historical search.
+async def historical_match_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for historical match search.
 
     Returns PARTIAL state update.
     """
     try:
         service = get_service()
 
-        request = SearchRequest(
+        request = HistoricalMatchRequest(
             session_id=state["session_id"],
             query=state["requirement_text"],
         )
@@ -34,11 +34,11 @@ async def search_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "current_agent": "await_selection",
             "messages": [
                 {
-                    "role": "search",
-                    "content": f"Found {response.total_matches} similar projects",
+                    "role": "historical_match",
+                    "content": f"Found {response.total_matches} similar historical projects",
                 }
             ],
-            "timing": {"search_ms": response.search_time_ms},
+            "timing": {"historical_match_ms": response.search_time_ms},
         }
 
     except Exception as e:

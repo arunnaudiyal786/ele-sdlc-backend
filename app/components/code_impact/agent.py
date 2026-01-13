@@ -21,8 +21,8 @@ async def code_impact_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
-            modules_output=state.get("modules_output", {}),
-            stories_output=state.get("stories_output", {}),
+            impacted_modules_output=state.get("impacted_modules_output", {}),
+            jira_stories_output=state.get("jira_stories_output", {}),
         )
 
         response = await service.process(request)

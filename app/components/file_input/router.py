@@ -28,10 +28,10 @@ async def process_file(request: FileInputRequest) -> FileProcessingResponse:
     **Input File Format (JSON):**
     ```json
     {
-        "session_id": "my-session-001",
         "requirement_text": "Description of the requirement...",
         "jira_epic_id": "PROJ-123",  // optional
-        "selected_matches": []       // empty = auto-select top 5
+        "selected_matches": [],      // empty = auto-select top 5
+        "session_id": "my-session"   // optional, auto-generated if omitted
     }
     ```
 
@@ -43,7 +43,7 @@ async def process_file(request: FileInputRequest) -> FileProcessingResponse:
     ```
 
     **Response:**
-    - `session_id`: The session identifier from the input file
+    - `session_id`: Auto-generated or provided session identifier
     - `status`: Pipeline completion status (completed/failed)
     - `output_path`: Path to session output directory
     - `message`: Human-readable status message

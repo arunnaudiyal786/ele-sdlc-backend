@@ -26,7 +26,7 @@ class SessionService(BaseComponent[SessionCreateRequest, SessionResponse]):
         random_suffix = secrets.token_hex(3)
         session_id = f"sess_{now.strftime('%Y%m%d')}_{now.strftime('%H%M%S')}_{random_suffix}"
 
-        date_folder = now.strftime("%Y-%m-%d")
+        date_folder = now.strftime("%Y-%m-%d-%H%M")
         session_dir = self.sessions_path / date_folder / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 

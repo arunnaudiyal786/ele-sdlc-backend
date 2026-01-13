@@ -19,9 +19,10 @@ class PipelineResponse(BaseModel):
     """Response with full impact assessment."""
     session_id: str
     status: str
-    modules_output: Dict | None = None
-    effort_output: Dict | None = None
-    stories_output: Dict | None = None
+    impacted_modules_output: Dict | None = None
+    estimation_effort_output: Dict | None = None
+    tdd_output: Dict | None = None
+    jira_stories_output: Dict | None = None
     code_impact_output: Dict | None = None
     risks_output: Dict | None = None
     messages: list[Dict] = []
@@ -59,9 +60,10 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
             "session_id": request.session_id,
             "status": final_state.get("status"),
             "completed_at": datetime.now().isoformat(),
-            "modules": final_state.get("modules_output"),
-            "effort": final_state.get("effort_output"),
-            "stories": final_state.get("stories_output"),
+            "impacted_modules": final_state.get("impacted_modules_output"),
+            "estimation_effort": final_state.get("estimation_effort_output"),
+            "tdd": final_state.get("tdd_output"),
+            "jira_stories": final_state.get("jira_stories_output"),
             "code_impact": final_state.get("code_impact_output"),
             "risks": final_state.get("risks_output"),
         })
@@ -69,9 +71,10 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
         return PipelineResponse(
             session_id=request.session_id,
             status=final_state.get("status", "unknown"),
-            modules_output=final_state.get("modules_output"),
-            effort_output=final_state.get("effort_output"),
-            stories_output=final_state.get("stories_output"),
+            impacted_modules_output=final_state.get("impacted_modules_output"),
+            estimation_effort_output=final_state.get("estimation_effort_output"),
+            tdd_output=final_state.get("tdd_output"),
+            jira_stories_output=final_state.get("jira_stories_output"),
             code_impact_output=final_state.get("code_impact_output"),
             risks_output=final_state.get("risks_output"),
             messages=final_state.get("messages", []),

@@ -1,4 +1,4 @@
-EFFORT_SYSTEM_PROMPT = """You are an expert software project estimator.
+ESTIMATION_EFFORT_SYSTEM_PROMPT = """You are an expert software project estimator.
 
 Given a requirement, impacted modules, and historical similar projects, estimate the development effort.
 
@@ -15,7 +15,7 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 Provide a realistic estimate with 3-5 breakdown categories."""
 
-EFFORT_USER_PROMPT = """REQUIREMENT:
+ESTIMATION_EFFORT_USER_PROMPT = """REQUIREMENT:
 {requirement_description}
 
 IMPACTED MODULES:

@@ -1,38 +1,38 @@
 from typing import Dict, Any
-from .service import EffortService
-from .models import EffortRequest
+from .service import EstimationEffortService
+from .models import EstimationEffortRequest
 
-_service: EffortService | None = None
+_service: EstimationEffortService | None = None
 
 
-def get_service() -> EffortService:
+def get_service() -> EstimationEffortService:
     global _service
     if _service is None:
-        _service = EffortService()
+        _service = EstimationEffortService()
     return _service
 
 
-async def effort_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for effort estimation."""
+async def estimation_effort_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for estimation effort."""
     try:
         service = get_service()
 
-        request = EffortRequest(
+        request = EstimationEffortRequest(
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
-            modules_output=state.get("modules_output", {}),
+            impacted_modules_output=state.get("impacted_modules_output", {}),
         )
 
         response = await service.process(request)
 
         return {
-            "effort_output": response.model_dump(),
-            "status": "effort_estimated",
-            "current_agent": "stories",
+            "estimation_effort_output": response.model_dump(),
+            "status": "estimation_effort_completed",
+            "current_agent": "tdd",
             "messages": [
                 {
-                    "role": "effort",
+                    "role": "estimation_effort",
                     "content": f"Estimated {response.total_hours} total hours ({response.confidence} confidence)",
                 }
             ],

@@ -10,17 +10,17 @@ class ModuleItem(BaseModel):
     reason: str
 
 
-class ModulesRequest(BaseModel):
+class ImpactedModulesRequest(BaseModel):
     """Request to identify impacted modules."""
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
 
 
-class ModulesResponse(BaseModel):
-    """Response with identified modules."""
+class ImpactedModulesResponse(BaseModel):
+    """Response with identified impacted modules."""
     session_id: str
-    agent: str = "modules"
+    agent: str = "impacted_modules"
     functional_modules: List[ModuleItem]
     technical_modules: List[ModuleItem]
     total_modules: int

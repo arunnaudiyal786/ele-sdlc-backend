@@ -1,10 +1,11 @@
 from langgraph.graph import StateGraph, END
 from .state import ImpactAssessmentState
 from ..requirement.agent import requirement_agent
-from ..search.agent import search_agent
-from ..modules.agent import modules_agent
-from ..effort.agent import effort_agent
-from ..stories.agent import stories_agent
+from ..historical_match.agent import historical_match_agent
+from ..impacted_modules.agent import impacted_modules_agent
+from ..estimation_effort.agent import estimation_effort_agent
+from ..tdd.agent import tdd_agent
+from ..jira_stories.agent import jira_stories_agent
 from ..code_impact.agent import code_impact_agent
 from ..risks.agent import risks_agent
 
@@ -32,7 +33,7 @@ async def auto_select_node(state: ImpactAssessmentState) -> dict:
     if state.get("selected_matches"):
         return {
             "status": "matches_selected",
-            "current_agent": "modules",
+            "current_agent": "impacted_modules",
             "messages": [
                 {
                     "role": "auto_select",
@@ -57,7 +58,7 @@ async def auto_select_node(state: ImpactAssessmentState) -> dict:
     return {
         "selected_matches": top_matches,
         "status": "matches_selected",
-        "current_agent": "modules",
+        "current_agent": "impacted_modules",
         "messages": [
             {
                 "role": "auto_select",
@@ -67,11 +68,11 @@ async def auto_select_node(state: ImpactAssessmentState) -> dict:
     }
 
 
-def route_after_search(state: ImpactAssessmentState) -> str:
-    """Route based on search results."""
+def route_after_historical_match(state: ImpactAssessmentState) -> str:
+    """Route based on historical match results."""
     if state.get("status") == "error":
         return "error_handler"
-    # Always go to auto_select after search
+    # Always go to auto_select after historical_match
     # auto_select will handle both pre-selected and auto-selection cases
     return "auto_select"
 
@@ -82,7 +83,7 @@ def route_after_auto_select(state: ImpactAssessmentState) -> str:
         return "error_handler"
     if not state.get("selected_matches"):
         return END
-    return "modules"
+    return "impacted_modules"
 
 
 def route_after_agent(state: ImpactAssessmentState) -> str:
@@ -96,16 +97,22 @@ def route_after_agent(state: ImpactAssessmentState) -> str:
 
 
 def create_impact_workflow() -> StateGraph:
-    """Create the LangGraph workflow for impact assessment."""
+    """Create the LangGraph workflow for impact assessment.
+
+    Workflow:
+    requirement -> historical_match -> auto_select -> impacted_modules
+    -> estimation_effort -> tdd -> jira_stories -> code_impact -> risks -> END
+    """
     workflow = StateGraph(ImpactAssessmentState)
 
     # Add nodes
     workflow.add_node("requirement", requirement_agent)
-    workflow.add_node("search", search_agent)
+    workflow.add_node("historical_match", historical_match_agent)
     workflow.add_node("auto_select", auto_select_node)
-    workflow.add_node("modules", modules_agent)
-    workflow.add_node("effort", effort_agent)
-    workflow.add_node("stories", stories_agent)
+    workflow.add_node("impacted_modules", impacted_modules_agent)
+    workflow.add_node("estimation_effort", estimation_effort_agent)
+    workflow.add_node("tdd", tdd_agent)
+    workflow.add_node("jira_stories", jira_stories_agent)
     workflow.add_node("code_impact", code_impact_agent)
     workflow.add_node("risks", risks_agent)
     workflow.add_node("error_handler", error_handler_node)
@@ -114,20 +121,21 @@ def create_impact_workflow() -> StateGraph:
     workflow.set_entry_point("requirement")
 
     # Wire edges
-    workflow.add_edge("requirement", "search")
+    workflow.add_edge("requirement", "historical_match")
     workflow.add_conditional_edges(
-        "search",
-        route_after_search,
+        "historical_match",
+        route_after_historical_match,
         {"auto_select": "auto_select", "error_handler": "error_handler"},
     )
     workflow.add_conditional_edges(
         "auto_select",
         route_after_auto_select,
-        {"modules": "modules", "error_handler": "error_handler", END: END},
+        {"impacted_modules": "impacted_modules", "error_handler": "error_handler", END: END},
     )
-    workflow.add_edge("modules", "effort")
-    workflow.add_edge("effort", "stories")
-    workflow.add_edge("stories", "code_impact")
+    workflow.add_edge("impacted_modules", "estimation_effort")
+    workflow.add_edge("estimation_effort", "tdd")
+    workflow.add_edge("tdd", "jira_stories")
+    workflow.add_edge("jira_stories", "code_impact")
     workflow.add_edge("code_impact", "risks")
     workflow.add_edge("risks", END)
     workflow.add_edge("error_handler", END)

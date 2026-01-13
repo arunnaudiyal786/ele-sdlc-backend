@@ -5,46 +5,46 @@ from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
 from app.utils.audit import AuditTrailManager
-from .models import EffortRequest, EffortResponse, EffortBreakdown
-from .prompts import EFFORT_SYSTEM_PROMPT, EFFORT_USER_PROMPT
+from .models import EstimationEffortRequest, EstimationEffortResponse, EffortBreakdown
+from .prompts import ESTIMATION_EFFORT_SYSTEM_PROMPT, ESTIMATION_EFFORT_USER_PROMPT
 
 
-class EffortService(BaseComponent[EffortRequest, EffortResponse]):
-    """Effort estimation agent as a component."""
+class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationEffortResponse]):
+    """Estimation effort agent as a component."""
 
     def __init__(self):
         self.ollama = get_ollama_client()
 
     @property
     def component_name(self) -> str:
-        return "effort"
+        return "estimation_effort"
 
-    async def process(self, request: EffortRequest) -> EffortResponse:
+    async def process(self, request: EstimationEffortRequest) -> EstimationEffortResponse:
         """Estimate effort using LLM."""
-        modules_summary = self._format_modules(request.modules_output)
+        modules_summary = self._format_modules(request.impacted_modules_output)
         formatted_matches = self._format_matches(request.selected_matches)
 
-        user_prompt = EFFORT_USER_PROMPT.format(
+        user_prompt = ESTIMATION_EFFORT_USER_PROMPT.format(
             requirement_description=request.requirement_text,
             modules_summary=modules_summary,
             formatted_historical_matches=formatted_matches,
         )
 
         audit = AuditTrailManager(request.session_id)
-        audit.save_text("input_prompt.txt", f"{EFFORT_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_effort")
+        audit.save_text("input_prompt.txt", f"{ESTIMATION_EFFORT_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_estimation_effort")
 
         raw_response = await self.ollama.generate(
-            system_prompt=EFFORT_SYSTEM_PROMPT,
+            system_prompt=ESTIMATION_EFFORT_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             format="json",
         )
 
-        audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_effort")
+        audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_estimation_effort")
 
         parsed = self._parse_response(raw_response)
         breakdown = [EffortBreakdown(**b) for b in parsed.get("breakdown", [])]
 
-        response = EffortResponse(
+        response = EstimationEffortResponse(
             session_id=request.session_id,
             total_dev_hours=parsed.get("total_dev_hours", 0),
             total_qa_hours=parsed.get("total_qa_hours", 0),
@@ -55,8 +55,8 @@ class EffortService(BaseComponent[EffortRequest, EffortResponse]):
             generated_at=datetime.now(),
         )
 
-        audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_effort")
-        audit.add_step_completed("effort_estimated")
+        audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_estimation_effort")
+        audit.add_step_completed("estimation_effort_completed")
 
         return response
 
@@ -82,4 +82,4 @@ class EffortService(BaseComponent[EffortRequest, EffortResponse]):
         try:
             return json.loads(raw)
         except json.JSONDecodeError as e:
-            raise ResponseParsingError(f"Failed to parse: {e}", component="effort")
+            raise ResponseParsingError(f"Failed to parse: {e}", component="estimation_effort")

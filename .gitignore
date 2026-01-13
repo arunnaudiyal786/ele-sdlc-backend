@@ -42,4 +42,4 @@ logs/
 ./claude
 
 output/
-data/sessions/
+sessions/

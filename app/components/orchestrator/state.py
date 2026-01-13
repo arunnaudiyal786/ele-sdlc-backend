@@ -15,14 +15,15 @@ class ImpactAssessmentState(TypedDict, total=False):
     jira_epic_id: Optional[str]
     extracted_keywords: List[str]
 
-    # SEARCH RESULTS - Set by search component
+    # SEARCH RESULTS - Set by historical_match component
     all_matches: List[Dict]
     selected_matches: List[Dict]
 
     # AGENT OUTPUTS - Set by each agent component
-    modules_output: Dict
-    effort_output: Dict
-    stories_output: Dict
+    impacted_modules_output: Dict
+    estimation_effort_output: Dict
+    tdd_output: Dict
+    jira_stories_output: Dict
     code_impact_output: Dict
     risks_output: Dict
 
@@ -32,7 +33,12 @@ class ImpactAssessmentState(TypedDict, total=False):
         "requirement_submitted",
         "matches_found",
         "matches_selected",
-        "generating_impact",
+        "impacted_modules_generated",
+        "estimation_effort_completed",
+        "tdd_generated",
+        "jira_stories_generated",
+        "code_impact_generated",
+        "risks_generated",
         "completed",
         "error",
     ]

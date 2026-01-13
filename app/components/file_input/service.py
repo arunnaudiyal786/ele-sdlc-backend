@@ -1,6 +1,7 @@
 """Service for processing file-based pipeline input."""
 
 import json
+import secrets
 from pathlib import Path
 from datetime import datetime
 
@@ -135,6 +136,29 @@ class FileInputService:
         date_str = datetime.now().strftime("%Y-%m-%d")
         return f"data/sessions/{date_str}/{session_id}/"
 
+    def _generate_session_id(self) -> str:
+        """Generate a unique session ID."""
+        now = datetime.now()
+        random_suffix = secrets.token_hex(3)
+        return f"sess_{now.strftime('%Y%m%d')}_{now.strftime('%H%M%S')}_{random_suffix}"
+
+    def _create_session_folder(self, session_id: str) -> Path:
+        """Create the session folder and return its path."""
+        date_folder = datetime.now().strftime("%Y-%m-%d-%H%M")
+        session_dir = Path(self.settings.data_sessions_path) / date_folder / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save initial session metadata
+        metadata = {
+            "session_id": session_id,
+            "created_at": datetime.now().isoformat(),
+            "status": "created",
+        }
+        with open(session_dir / "session_metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        return session_dir
+
     async def process_file(self, file_path: str) -> FileProcessingResponse:
         """Process an input file through the full pipeline.
 
@@ -156,28 +180,34 @@ class FileInputService:
         # Step 3: Verify ChromaDB is initialized
         self._check_vector_db_initialized()
 
-        # Step 4: Build pipeline request
+        # Step 4: Generate session_id if not provided
+        session_id = content.session_id or self._generate_session_id()
+
+        # Step 5: Create session folder
+        self._create_session_folder(session_id)
+
+        # Step 6: Build pipeline request
         request = PipelineRequest(
-            session_id=content.session_id,
+            session_id=session_id,
             requirement_text=content.requirement_text,
             jira_epic_id=content.jira_epic_id,
             selected_matches=content.selected_matches,
         )
 
-        # Step 5: Run the pipeline
+        # Step 7: Run the pipeline
         try:
             response = await self.orchestrator.process(request)
         except Exception as e:
             return FileProcessingResponse(
-                session_id=content.session_id,
+                session_id=session_id,
                 status="failed",
-                output_path=self._get_output_path(content.session_id),
+                output_path=self._get_output_path(session_id),
                 message="Pipeline execution failed",
                 error_message=str(e)
             )
 
-        # Step 6: Return result
-        output_path = self._get_output_path(content.session_id)
+        # Step 8: Return result
+        output_path = self._get_output_path(session_id)
 
         return FileProcessingResponse(
             session_id=response.session_id,

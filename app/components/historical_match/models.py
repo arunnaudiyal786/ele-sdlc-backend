@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 
 
-class SearchRequest(BaseModel):
+class HistoricalMatchRequest(BaseModel):
     """Request to search for historical matches."""
     session_id: str
     query: str
@@ -24,8 +24,8 @@ class MatchResult(BaseModel):
     estimated_hours: Optional[int] = None
 
 
-class SearchResponse(BaseModel):
-    """Search results response."""
+class HistoricalMatchResponse(BaseModel):
+    """Historical match results response."""
     session_id: str
     total_matches: int
     matches: List[MatchResult]

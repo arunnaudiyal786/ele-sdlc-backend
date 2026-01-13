@@ -11,18 +11,18 @@ class EffortBreakdown(BaseModel):
     description: str
 
 
-class EffortRequest(BaseModel):
-    """Request for effort estimation."""
+class EstimationEffortRequest(BaseModel):
+    """Request for estimation effort."""
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
-    modules_output: Dict
+    impacted_modules_output: Dict
 
 
-class EffortResponse(BaseModel):
-    """Response with effort estimation."""
+class EstimationEffortResponse(BaseModel):
+    """Response with estimation effort."""
     session_id: str
-    agent: str = "effort"
+    agent: str = "estimation_effort"
     total_dev_hours: int
     total_qa_hours: int
     total_hours: int

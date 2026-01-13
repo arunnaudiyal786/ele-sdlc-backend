@@ -1,4 +1,4 @@
-MODULES_SYSTEM_PROMPT = """You are an expert software architect analyzing project requirements.
+IMPACTED_MODULES_SYSTEM_PROMPT = """You are an expert software architect analyzing project requirements.
 
 Given a requirement and historical similar projects, identify the impacted modules.
 
@@ -14,7 +14,7 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 Provide exactly 10 modules total (mix of functional and technical)."""
 
-MODULES_USER_PROMPT = """REQUIREMENT:
+IMPACTED_MODULES_USER_PROMPT = """REQUIREMENT:
 {requirement_description}
 
 SIMILAR HISTORICAL PROJECTS:

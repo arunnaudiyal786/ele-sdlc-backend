@@ -1,41 +1,40 @@
 from typing import Dict, Any
-from .service import RisksService
-from .models import RisksRequest
+from .service import TDDService
+from .models import TDDRequest
 
-_service: RisksService | None = None
+_service: TDDService | None = None
 
 
-def get_service() -> RisksService:
+def get_service() -> TDDService:
     global _service
     if _service is None:
-        _service = RisksService()
+        _service = TDDService()
     return _service
 
 
-async def risks_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for risk identification."""
+async def tdd_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for TDD generation."""
     try:
         service = get_service()
 
-        request = RisksRequest(
+        request = TDDRequest(
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
             impacted_modules_output=state.get("impacted_modules_output", {}),
             estimation_effort_output=state.get("estimation_effort_output", {}),
-            code_impact_output=state.get("code_impact_output", {}),
         )
 
         response = await service.process(request)
 
         return {
-            "risks_output": response.model_dump(),
-            "status": "completed",
-            "current_agent": "done",
+            "tdd_output": response.model_dump(),
+            "status": "tdd_generated",
+            "current_agent": "jira_stories",
             "messages": [
                 {
-                    "role": "risks",
-                    "content": f"Identified {response.total_risks} risks ({response.high_severity_count} high severity)",
+                    "role": "tdd",
+                    "content": f"Generated TDD: {response.tdd_name} (saved to {response.markdown_file_path})",
                 }
             ],
         }

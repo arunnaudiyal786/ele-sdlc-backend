@@ -6,10 +6,11 @@ from app.components.base.config import get_settings
 from app.components.base.logging import configure_logging, get_logger
 from app.components.session.router import router as session_router
 from app.components.requirement.router import router as requirement_router
-from app.components.search.router import router as search_router
-from app.components.modules.router import router as modules_router
-from app.components.effort.router import router as effort_router
-from app.components.stories.router import router as stories_router
+from app.components.historical_match.router import router as historical_match_router
+from app.components.impacted_modules.router import router as impacted_modules_router
+from app.components.estimation_effort.router import router as estimation_effort_router
+from app.components.tdd.router import router as tdd_router
+from app.components.jira_stories.router import router as jira_stories_router
 from app.components.code_impact.router import router as code_router
 from app.components.risks.router import router as risks_router
 from app.components.orchestrator.router import router as orchestrator_router
@@ -65,10 +66,11 @@ app.add_middleware(
 # Mount component routers
 app.include_router(session_router, prefix="/api/v1")
 app.include_router(requirement_router, prefix="/api/v1")
-app.include_router(search_router, prefix="/api/v1")
-app.include_router(modules_router, prefix="/api/v1")
-app.include_router(effort_router, prefix="/api/v1")
-app.include_router(stories_router, prefix="/api/v1")
+app.include_router(historical_match_router, prefix="/api/v1")
+app.include_router(impacted_modules_router, prefix="/api/v1")
+app.include_router(estimation_effort_router, prefix="/api/v1")
+app.include_router(tdd_router, prefix="/api/v1")
+app.include_router(jira_stories_router, prefix="/api/v1")
 app.include_router(code_router, prefix="/api/v1")
 app.include_router(risks_router, prefix="/api/v1")
 app.include_router(orchestrator_router, prefix="/api/v1")

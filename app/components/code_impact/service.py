@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
@@ -21,8 +21,8 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
 
     async def process(self, request: CodeImpactRequest) -> CodeImpactResponse:
         """Analyze code impact using LLM."""
-        modules_summary = self._format_modules(request.modules_output)
-        stories_summary = self._format_stories(request.stories_output)
+        modules_summary = self._format_modules(request.impacted_modules_output)
+        stories_summary = self._format_stories(request.jira_stories_output)
 
         user_prompt = CODE_IMPACT_USER_PROMPT.format(
             requirement_description=request.requirement_text,
@@ -31,7 +31,7 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
         )
 
         audit = AuditTrailManager(request.session_id)
-        audit.save_text("input_prompt.txt", f"{CODE_IMPACT_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_code")
+        audit.save_text("input_prompt.txt", f"{CODE_IMPACT_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_code_impact")
 
         raw_response = await self.ollama.generate(
             system_prompt=CODE_IMPACT_SYSTEM_PROMPT,
@@ -39,7 +39,7 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
             format="json",
         )
 
-        audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_code")
+        audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_code_impact")
 
         parsed = self._parse_response(raw_response)
         files = [CodeFile(**f) for f in parsed.get("files", [])]
@@ -53,7 +53,7 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
             generated_at=datetime.now(),
         )
 
-        audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_code")
+        audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_code_impact")
         audit.add_step_completed("code_impact_analyzed")
 
         return response

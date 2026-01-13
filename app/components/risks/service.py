@@ -21,8 +21,8 @@ class RisksService(BaseComponent[RisksRequest, RisksResponse]):
 
     async def process(self, request: RisksRequest) -> RisksResponse:
         """Identify risks using LLM."""
-        modules_summary = self._format_modules(request.modules_output)
-        effort_summary = self._format_effort(request.effort_output)
+        modules_summary = self._format_modules(request.impacted_modules_output)
+        effort_summary = self._format_effort(request.estimation_effort_output)
         code_summary = self._format_code(request.code_impact_output)
 
         user_prompt = RISKS_USER_PROMPT.format(

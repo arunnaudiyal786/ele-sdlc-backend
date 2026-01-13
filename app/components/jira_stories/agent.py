@@ -1,41 +1,41 @@
 from typing import Dict, Any
-from .service import RisksService
-from .models import RisksRequest
+from .service import JiraStoriesService
+from .models import JiraStoriesRequest
 
-_service: RisksService | None = None
+_service: JiraStoriesService | None = None
 
 
-def get_service() -> RisksService:
+def get_service() -> JiraStoriesService:
     global _service
     if _service is None:
-        _service = RisksService()
+        _service = JiraStoriesService()
     return _service
 
 
-async def risks_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for risk identification."""
+async def jira_stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for Jira stories generation."""
     try:
         service = get_service()
 
-        request = RisksRequest(
+        request = JiraStoriesRequest(
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
             impacted_modules_output=state.get("impacted_modules_output", {}),
             estimation_effort_output=state.get("estimation_effort_output", {}),
-            code_impact_output=state.get("code_impact_output", {}),
+            tdd_output=state.get("tdd_output", {}),
         )
 
         response = await service.process(request)
 
         return {
-            "risks_output": response.model_dump(),
-            "status": "completed",
-            "current_agent": "done",
+            "jira_stories_output": response.model_dump(),
+            "status": "jira_stories_generated",
+            "current_agent": "code_impact",
             "messages": [
                 {
-                    "role": "risks",
-                    "content": f"Identified {response.total_risks} risks ({response.high_severity_count} high severity)",
+                    "role": "jira_stories",
+                    "content": f"Generated {response.total_stories} Jira stories ({response.total_story_points} points)",
                 }
             ],
         }

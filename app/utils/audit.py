@@ -8,12 +8,33 @@ from app.components.base.config import get_settings
 class AuditTrailManager:
     """Manages session audit trail persistence."""
 
+    session_dir: Path  # Always set after __init__
+
     def __init__(self, session_id: str):
         self.session_id = session_id
         settings = get_settings()
-        date_folder = datetime.now().strftime("%Y-%m-%d")
-        self.session_dir = Path(settings.data_sessions_path) / date_folder / session_id
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+        sessions_path = Path(settings.data_sessions_path)
+
+        # Find existing session folder instead of creating new one
+        existing_dir = self._find_session_dir(sessions_path, session_id)
+        if existing_dir:
+            self.session_dir = existing_dir
+        else:
+            # Fallback: create new folder if session not found
+            date_folder = datetime.now().strftime("%Y-%m-%d-%H%M")
+            self.session_dir = sessions_path / date_folder / session_id
+            self.session_dir.mkdir(parents=True, exist_ok=True)
+
+    def _find_session_dir(self, sessions_path: Path, session_id: str) -> Optional[Path]:
+        """Find existing session directory by ID."""
+        if not sessions_path.exists():
+            return None
+        for date_folder in sessions_path.iterdir():
+            if date_folder.is_dir():
+                session_dir = date_folder / session_id
+                if session_dir.exists():
+                    return session_dir
+        return None
 
     def save_json(self, filename: str, data: Any, subfolder: Optional[str] = None) -> Path:
         """Save data as JSON to session directory."""

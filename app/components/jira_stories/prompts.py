@@ -1,6 +1,6 @@
-STORIES_SYSTEM_PROMPT = """You are an expert Agile project manager creating Jira stories.
+JIRA_STORIES_SYSTEM_PROMPT = """You are an expert Agile project manager creating Jira stories.
 
-Given a requirement, impacted modules, and effort estimates, generate user stories.
+Given a requirement, impacted modules, TDD summary, and effort estimates, generate user stories.
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -17,11 +17,14 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 Generate exactly 10 stories that cover the full implementation."""
 
-STORIES_USER_PROMPT = """REQUIREMENT:
+JIRA_STORIES_USER_PROMPT = """REQUIREMENT:
 {requirement_description}
 
 IMPACTED MODULES:
 {modules_summary}
+
+TDD SUMMARY:
+{tdd_summary}
 
 EFFORT ESTIMATE:
 {effort_summary}

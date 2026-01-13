@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Dict
 from datetime import datetime
 
@@ -18,8 +18,8 @@ class RisksRequest(BaseModel):
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
-    modules_output: Dict
-    effort_output: Dict
+    impacted_modules_output: Dict
+    estimation_effort_output: Dict
     code_impact_output: Dict
 
 

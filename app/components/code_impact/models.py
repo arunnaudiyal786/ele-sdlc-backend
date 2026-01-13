@@ -18,8 +18,8 @@ class CodeImpactRequest(BaseModel):
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
-    modules_output: Dict
-    stories_output: Dict
+    impacted_modules_output: Dict
+    jira_stories_output: Dict
 
 
 class CodeImpactResponse(BaseModel):

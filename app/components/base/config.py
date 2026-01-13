@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Paths
     data_raw_path: str = "./data/raw"
     data_uploads_path: str = "./data/uploads"
-    data_sessions_path: str = "./data/sessions"
+    data_sessions_path: str = "./sessions"
 
     class Config:
         env_file = ".env"

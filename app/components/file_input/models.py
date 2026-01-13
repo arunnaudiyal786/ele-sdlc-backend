@@ -2,7 +2,6 @@
 
 from typing import Dict, List
 from pydantic import BaseModel, Field, field_validator
-from pathlib import Path
 
 
 class FileInputRequest(BaseModel):
@@ -17,10 +16,9 @@ class FileInputRequest(BaseModel):
 class FileInputContent(BaseModel):
     """Schema for the JSON content inside the input file."""
 
-    session_id: str = Field(
-        ...,
-        min_length=1,
-        description="Unique session identifier for tracking this pipeline run"
+    session_id: str | None = Field(
+        default=None,
+        description="Optional session identifier (auto-generated if not provided)"
     )
     requirement_text: str = Field(
         ...,
@@ -38,8 +36,10 @@ class FileInputContent(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def validate_session_id(cls, v: str) -> str:
-        """Ensure session_id contains only safe characters."""
+    def validate_session_id(cls, v: str | None) -> str | None:
+        """Ensure session_id contains only safe characters if provided."""
+        if v is None:
+            return v
         import re
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError("session_id must contain only alphanumeric, underscore, or hyphen characters")

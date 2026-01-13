@@ -3,7 +3,7 @@ from typing import List, Dict
 from datetime import datetime
 
 
-class StoryItem(BaseModel):
+class JiraStoryItem(BaseModel):
     """Single Jira story."""
     title: str
     story_type: str = Field(..., pattern="^(Story|Task|Bug|Spike)$")
@@ -12,20 +12,21 @@ class StoryItem(BaseModel):
     priority: str = Field(..., pattern="^(HIGH|MEDIUM|LOW)$")
 
 
-class StoriesRequest(BaseModel):
+class JiraStoriesRequest(BaseModel):
     """Request to generate Jira stories."""
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
-    modules_output: Dict
-    effort_output: Dict
+    impacted_modules_output: Dict
+    estimation_effort_output: Dict
+    tdd_output: Dict
 
 
-class StoriesResponse(BaseModel):
-    """Response with generated stories."""
+class JiraStoriesResponse(BaseModel):
+    """Response with generated Jira stories."""
     session_id: str
-    agent: str = "stories"
-    stories: List[StoryItem]
+    agent: str = "jira_stories"
+    stories: List[JiraStoryItem]
     total_stories: int
     total_story_points: int
     generated_at: datetime

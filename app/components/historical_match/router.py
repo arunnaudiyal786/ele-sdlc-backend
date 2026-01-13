@@ -1,25 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException
-from .service import SearchService
-from .models import SearchRequest, SearchResponse, MatchSelectionRequest, MatchSelectionResponse
+from .service import HistoricalMatchService
+from .models import HistoricalMatchRequest, HistoricalMatchResponse, MatchSelectionRequest, MatchSelectionResponse
 from app.components.base.exceptions import ComponentError
 
-router = APIRouter(prefix="/search", tags=["Search"])
+router = APIRouter(prefix="/historical-match", tags=["Historical Match"])
 
-_service: SearchService | None = None
+_service: HistoricalMatchService | None = None
 
 
-def get_service() -> SearchService:
+def get_service() -> HistoricalMatchService:
     global _service
     if _service is None:
-        _service = SearchService()
+        _service = HistoricalMatchService()
     return _service
 
 
-@router.post("/find-matches", response_model=SearchResponse)
+@router.post("/find-matches", response_model=HistoricalMatchResponse)
 async def find_matches(
-    request: SearchRequest,
-    service: SearchService = Depends(get_service),
-) -> SearchResponse:
+    request: HistoricalMatchRequest,
+    service: HistoricalMatchService = Depends(get_service),
+) -> HistoricalMatchResponse:
     """Search for similar historical projects."""
     try:
         return await service.process(request)
@@ -30,7 +30,7 @@ async def find_matches(
 @router.post("/select-matches", response_model=MatchSelectionResponse)
 async def select_matches(
     request: MatchSelectionRequest,
-    service: SearchService = Depends(get_service),
+    service: HistoricalMatchService = Depends(get_service),
 ) -> MatchSelectionResponse:
     """Select matches for impact analysis."""
     try:
