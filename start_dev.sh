@@ -121,21 +121,62 @@ echo -e "${BLUE}┌────────────────────�
 echo -e "${BLUE}│${NC} ${DATABASE} ${BOLD}[3/4] ChromaDB Vector Store${NC}                              ${BLUE}│${NC}"
 echo -e "${BLUE}└────────────────────────────────────────────────────────────┘${NC}"
 
+# Check if vector database exists
 if [ ! -d "./data/chroma" ] || [ -z "$(ls -A ./data/chroma 2>/dev/null)" ]; then
-    echo -e "      ${ARROW} Initializing vector database..."
-    echo -e "      ${DIM}   Loading: epics, estimations, TDDs, stories, code${NC}"
+    # Fresh run - no index exists
+    echo -e "      ${WARN} No vector index found"
     echo ""
-    python scripts/init_vector_db.py
+    echo -e "      ${BOLD}Create a new vector index?${NC}"
+    echo -e "      ${DIM}This will index: epics, estimations, TDDs, stories, code${NC}"
     echo ""
-    echo -e "      ${CHECK} Vector database initialized"
+    echo -e "      ${CYAN}[Y]${NC} Yes, create new index"
+    echo -e "      ${CYAN}[N]${NC} No, skip (server will start without vector search)"
+    echo ""
+    read -p "      Your choice [Y/n]: " CREATE_CHOICE
+    CREATE_CHOICE=${CREATE_CHOICE:-Y}  # Default to Yes
+
+    if [[ "$CREATE_CHOICE" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "      ${ARROW} Creating vector database..."
+        echo ""
+        python scripts/init_vector_db.py
+        echo ""
+        echo -e "      ${CHECK} Vector database created"
+    else
+        echo ""
+        echo -e "      ${WARN} Skipping index creation"
+        echo -e "      ${DIM}   Vector search may not work correctly${NC}"
+    fi
 else
-    # Count collections
+    # Index exists - offer to rebuild
     COLLECTION_COUNT=$(ls -d ./data/chroma/*/ 2>/dev/null | wc -l | tr -d ' ')
-    echo -e "      ${CHECK} ChromaDB already initialized"
+    echo -e "      ${CHECK} Existing index found"
     echo -e "      ${DIM}   Location: ./data/chroma${NC}"
     echo -e "      ${DIM}   Collections: ${COLLECTION_COUNT} indexed${NC}"
     echo ""
-    echo -e "      ${WARN} To rebuild: ${CYAN}python scripts/reindex.py && python scripts/init_vector_db.py${NC}"
+    echo -e "      ${BOLD}Rebuild the vector index?${NC}"
+    echo -e "      ${DIM}Rebuild if you've updated data files (CSVs/JSON)${NC}"
+    echo ""
+    echo -e "      ${CYAN}[S]${NC} Skip, use existing index ${DIM}(recommended)${NC}"
+    echo -e "      ${CYAN}[R]${NC} Rebuild index ${DIM}(deletes and recreates all collections)${NC}"
+    echo ""
+    read -p "      Your choice [S/r]: " REBUILD_CHOICE
+    REBUILD_CHOICE=${REBUILD_CHOICE:-S}  # Default to Skip
+
+    if [[ "$REBUILD_CHOICE" =~ ^[Rr]$ ]]; then
+        echo ""
+        echo -e "      ${ARROW} Deleting existing collections..."
+        python scripts/reindex.py
+        echo ""
+        echo -e "      ${ARROW} Rebuilding vector database..."
+        echo ""
+        python scripts/init_vector_db.py
+        echo ""
+        echo -e "      ${CHECK} Vector database rebuilt"
+    else
+        echo ""
+        echo -e "      ${CHECK} Using existing index"
+    fi
 fi
 echo ""
 
