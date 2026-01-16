@@ -1,9 +1,10 @@
-import json
 from datetime import datetime
 from typing import Dict, List
+import json
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import ImpactedModulesRequest, ImpactedModulesResponse, ModuleItem
 from .prompts import IMPACTED_MODULES_SYSTEM_PROMPT, IMPACTED_MODULES_USER_PROMPT
@@ -40,8 +41,8 @@ class ImpactedModulesService(BaseComponent[ImpactedModulesRequest, ImpactedModul
         audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_impacted_modules")
 
         parsed = self._parse_response(raw_response)
-        functional = [ModuleItem(**m) for m in parsed.get("functional_modules", [])]
-        technical = [ModuleItem(**m) for m in parsed.get("technical_modules", [])]
+        functional = self._normalize_modules(parsed.get("functional_modules", []))
+        technical = self._normalize_modules(parsed.get("technical_modules", []))
 
         response = ImpactedModulesResponse(
             session_id=request.session_id,
@@ -63,10 +64,62 @@ class ImpactedModulesService(BaseComponent[ImpactedModulesRequest, ImpactedModul
             lines.append(f"{i}. {m.get('epic_name', 'Unknown')}: {m.get('description', '')[:200]}")
         return "\n".join(lines) if lines else "No historical matches available."
 
+    def _normalize_modules(self, modules: List[Dict]) -> List[ModuleItem]:
+        """Normalize module data from LLM to handle schema variations.
+
+        The LLM sometimes generates malformed keys or missing fields.
+        This method attempts to extract valid data from imperfect responses.
+        """
+        normalized = []
+        for m in modules:
+            if not isinstance(m, dict):
+                continue
+
+            # Try to extract name - look for common key variations
+            name = None
+            for key in ["name", "module_name", "moduleName", "module"]:
+                if key in m:
+                    name = str(m[key])
+                    break
+
+            # If no standard key found, try to find a string value that looks like a name
+            if not name:
+                for key, value in m.items():
+                    if isinstance(value, str) and len(value) < 100 and not key.startswith("reason"):
+                        name = value
+                        break
+
+            if not name:
+                continue  # Skip entries without any identifiable name
+
+            # Extract impact - default to MEDIUM if missing or invalid
+            impact = "MEDIUM"
+            for key in ["impact", "severity", "priority"]:
+                if key in m:
+                    val = str(m[key]).upper()
+                    if val in ["HIGH", "MEDIUM", "LOW"]:
+                        impact = val
+                        break
+
+            # Extract reason - default if missing
+            reason = "Impact identified by analysis"
+            for key in ["reason", "description", "rationale", "explanation"]:
+                if key in m and isinstance(m[key], str):
+                    reason = m[key]
+                    break
+
+            try:
+                normalized.append(ModuleItem(name=name, impact=impact, reason=reason))
+            except Exception:
+                # If validation still fails, skip this entry
+                continue
+
+        return normalized
+
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="impacted_modules")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(
                 f"Failed to parse LLM response: {e}",

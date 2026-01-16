@@ -4,6 +4,7 @@ from typing import Dict
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import RisksRequest, RisksResponse, RiskItem
 from .prompts import RISKS_SYSTEM_PROMPT, RISKS_USER_PROMPT
@@ -75,8 +76,8 @@ class RisksService(BaseComponent[RisksRequest, RisksResponse]):
         return f"{code_output.get('total_files', 0)} files across {len(code_output.get('repositories_affected', []))} repositories"
 
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="risks")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(f"Failed to parse: {e}", component="risks")

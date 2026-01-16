@@ -1,10 +1,44 @@
-from typing import Dict, Any
+from typing import Dict, Any, AsyncGenerator, Literal
 from datetime import datetime
+import json
 from pydantic import BaseModel
 from app.components.base.component import BaseComponent
 from app.utils.audit import AuditTrailManager
 from .state import ImpactAssessmentState
 from .workflow import create_impact_workflow
+
+
+# Agent execution order for progress tracking
+AGENT_ORDER = [
+    "requirement",
+    "historical_match",
+    "auto_select",
+    "impacted_modules",
+    "estimation_effort",
+    "tdd",
+    "jira_stories",
+    "code_impact",
+    "risks",
+]
+
+
+class StreamEventData(BaseModel):
+    """Data payload for streaming events."""
+    agent_name: str | None = None
+    agent_index: int | None = None
+    total_agents: int = len(AGENT_ORDER)
+    status: str | None = None
+    output: Dict | None = None
+    error: str | None = None
+    progress_percent: int | None = None
+
+
+class StreamEvent(BaseModel):
+    """SSE event structure for pipeline streaming."""
+    type: Literal["pipeline_start", "agent_complete", "pipeline_complete", "pipeline_error"]
+    session_id: str
+    timestamp: str
+    data: StreamEventData
 
 
 class PipelineRequest(BaseModel):
@@ -85,3 +119,119 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
         """Get summary for a completed session."""
         audit = AuditTrailManager(session_id)
         return audit.load_json("final_summary.json")
+
+    def _format_sse_event(self, event: StreamEvent) -> str:
+        """Format event as SSE string."""
+        return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+
+    async def process_streaming(self, request: PipelineRequest) -> AsyncGenerator[str, None]:
+        """Run pipeline with streaming progress updates via SSE."""
+        initial_state: ImpactAssessmentState = {
+            "session_id": request.session_id,
+            "requirement_text": request.requirement_text,
+            "jira_epic_id": request.jira_epic_id,
+            "selected_matches": request.selected_matches,
+            "status": "created",
+            "current_agent": "requirement",
+            "messages": [],
+        }
+
+        # Emit pipeline_start event
+        yield self._format_sse_event(StreamEvent(
+            type="pipeline_start",
+            session_id=request.session_id,
+            timestamp=datetime.now().isoformat(),
+            data=StreamEventData(progress_percent=0)
+        ))
+
+        final_state = initial_state.copy()
+
+        try:
+            # Stream updates from LangGraph workflow
+            async for chunk in self.workflow.astream(initial_state, stream_mode="updates"):
+                for node_name, node_output in chunk.items():
+                    # Skip internal nodes like __start__, __end__
+                    if node_name.startswith("__"):
+                        continue
+
+                    # Update accumulated state
+                    final_state.update(node_output)
+
+                    # Calculate progress
+                    agent_idx = AGENT_ORDER.index(node_name) if node_name in AGENT_ORDER else -1
+                    progress = int(((agent_idx + 1) / len(AGENT_ORDER)) * 100) if agent_idx >= 0 else 0
+
+                    # Check for errors
+                    if node_output.get("status") == "error":
+                        yield self._format_sse_event(StreamEvent(
+                            type="pipeline_error",
+                            session_id=request.session_id,
+                            timestamp=datetime.now().isoformat(),
+                            data=StreamEventData(
+                                agent_name=node_name,
+                                agent_index=agent_idx,
+                                status="error",
+                                error=node_output.get("error_message", "Unknown error"),
+                                progress_percent=progress
+                            )
+                        ))
+                        return
+
+                    # Emit agent_complete event
+                    yield self._format_sse_event(StreamEvent(
+                        type="agent_complete",
+                        session_id=request.session_id,
+                        timestamp=datetime.now().isoformat(),
+                        data=StreamEventData(
+                            agent_name=node_name,
+                            agent_index=agent_idx,
+                            status=node_output.get("status"),
+                            output=node_output,
+                            progress_percent=progress
+                        )
+                    ))
+
+            # Save final summary
+            audit = AuditTrailManager(request.session_id)
+            audit.save_json("final_summary.json", {
+                "session_id": request.session_id,
+                "status": final_state.get("status"),
+                "completed_at": datetime.now().isoformat(),
+                "impacted_modules": final_state.get("impacted_modules_output"),
+                "estimation_effort": final_state.get("estimation_effort_output"),
+                "tdd": final_state.get("tdd_output"),
+                "jira_stories": final_state.get("jira_stories_output"),
+                "code_impact": final_state.get("code_impact_output"),
+                "risks": final_state.get("risks_output"),
+            })
+
+            # Emit pipeline_complete event with final outputs
+            yield self._format_sse_event(StreamEvent(
+                type="pipeline_complete",
+                session_id=request.session_id,
+                timestamp=datetime.now().isoformat(),
+                data=StreamEventData(
+                    status=final_state.get("status", "completed"),
+                    progress_percent=100,
+                    output={
+                        "impacted_modules_output": final_state.get("impacted_modules_output"),
+                        "estimation_effort_output": final_state.get("estimation_effort_output"),
+                        "tdd_output": final_state.get("tdd_output"),
+                        "jira_stories_output": final_state.get("jira_stories_output"),
+                        "code_impact_output": final_state.get("code_impact_output"),
+                        "risks_output": final_state.get("risks_output"),
+                        "messages": final_state.get("messages", []),
+                    }
+                )
+            ))
+
+        except Exception as e:
+            yield self._format_sse_event(StreamEvent(
+                type="pipeline_error",
+                session_id=request.session_id,
+                timestamp=datetime.now().isoformat(),
+                data=StreamEventData(
+                    status="error",
+                    error=str(e)
+                )
+            ))

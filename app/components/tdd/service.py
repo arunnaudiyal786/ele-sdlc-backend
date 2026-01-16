@@ -4,6 +4,7 @@ from typing import Dict, List
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import TDDRequest, TDDResponse
 from .prompts import TDD_SYSTEM_PROMPT, TDD_USER_PROMPT, TDD_MARKDOWN_TEMPLATE
@@ -149,8 +150,8 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
         )
 
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="tdd")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(f"Failed to parse: {e}", component="tdd")

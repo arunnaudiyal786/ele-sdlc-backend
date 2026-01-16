@@ -67,28 +67,32 @@ from pydantic import BaseModel, Field
 from typing import List, Dict
 from datetime import datetime
 
-class StoryItem(BaseModel):
+class JiraStoryItem(BaseModel):
     """Single Jira story."""
+    story_id: str = Field(default="")
     title: str
+    description: str = Field(default="")
     story_type: str = Field(..., pattern="^(Story|Task|Bug|Spike)$")
     story_points: int = Field(..., ge=1, le=13)
     acceptance_criteria: List[str]
     priority: str = Field(..., pattern="^(HIGH|MEDIUM|LOW)$")
+    labels: List[str] = Field(default_factory=list)
 
-class StoriesRequest(BaseModel):
+class JiraStoriesRequest(BaseModel):
     """Request to generate Jira stories."""
     session_id: str
     requirement_text: str
     selected_matches: List[Dict]
-    modules_output: Dict
-    effort_output: Dict
+    impacted_modules_output: Dict
+    estimation_effort_output: Dict
+    tdd_output: Dict
 
-class StoriesResponse(BaseModel):
+class JiraStoriesResponse(BaseModel):
     """Response with generated stories."""
     session_id: str
-    agent: str = "stories"
-    stories: List[StoryItem]
-    total_stories: int
+    agent: str = "jira_stories"
+    stories: List[JiraStoryItem]
+    story_count: int
     total_story_points: int
     generated_at: datetime
 ```
@@ -160,7 +164,7 @@ Generate 10 Jira stories to implement this requirement."""
 Core business logic for story generation.
 
 ```python
-class StoriesService(BaseComponent[StoriesRequest, StoriesResponse]):
+class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse]):
     """Jira stories generation agent as a component."""
 
     def __init__(self):
@@ -168,52 +172,54 @@ class StoriesService(BaseComponent[StoriesRequest, StoriesResponse]):
 
     @property
     def component_name(self) -> str:
-        return "stories"
+        return "jira_stories"
 ```
 
 **Process Method:**
 
 ```python
-async def process(self, request: StoriesRequest) -> StoriesResponse:
+async def process(self, request: JiraStoriesRequest) -> JiraStoriesResponse:
     """Generate Jira stories using LLM."""
-    modules_summary = self._format_modules(request.modules_output)
-    effort_summary = self._format_effort(request.effort_output)
+    modules_summary = self._format_modules(request.impacted_modules_output)
+    effort_summary = self._format_effort(request.estimation_effort_output)
+    tdd_summary = self._format_tdd(request.tdd_output)
 
-    user_prompt = STORIES_USER_PROMPT.format(
+    user_prompt = JIRA_STORIES_USER_PROMPT.format(
         requirement_description=request.requirement_text,
         modules_summary=modules_summary,
+        tdd_summary=tdd_summary,
         effort_summary=effort_summary,
     )
 
     audit = AuditTrailManager(request.session_id)
     audit.save_text(
         "input_prompt.txt",
-        f"{STORIES_SYSTEM_PROMPT}\n\n{user_prompt}",
-        subfolder="step3_agents/agent_stories"
+        f"{JIRA_STORIES_SYSTEM_PROMPT}\n\n{user_prompt}",
+        subfolder="step3_agents/agent_jira_stories"
     )
 
     raw_response = await self.ollama.generate(
-        system_prompt=STORIES_SYSTEM_PROMPT,
+        system_prompt=JIRA_STORIES_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         format="json",
     )
 
-    audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_stories")
+    audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_jira_stories")
 
     parsed = self._parse_response(raw_response)
-    stories = [StoryItem(**s) for s in parsed.get("stories", [])]
+    stories = [JiraStoryItem(**s) for s in parsed.get("stories", [])]
     total_points = sum(s.story_points for s in stories)
 
-    response = StoriesResponse(
+    response = JiraStoriesResponse(
         session_id=request.session_id,
         stories=stories,
-        total_stories=len(stories),
+        story_count=len(stories),
         total_story_points=total_points,
         generated_at=datetime.now(),
     )
 
-    audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_stories")
-    audit.add_step_completed("stories_generated")
+    audit.save_json("parsed_output.json", response.model_dump(), subfolder="step3_agents/agent_jira_stories")
+    audit.add_step_completed("jira_stories_generated")
 
     return response
 ```
@@ -244,29 +250,30 @@ def _format_effort(self, effort_output: Dict) -> str:
 LangGraph node wrapper.
 
 ```python
-async def stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node for stories generation."""
+async def jira_stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node for Jira stories generation."""
     try:
         service = get_service()
 
-        request = StoriesRequest(
+        request = JiraStoriesRequest(
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
-            modules_output=state.get("modules_output", {}),
-            effort_output=state.get("effort_output", {}),
+            impacted_modules_output=state.get("impacted_modules_output", {}),
+            estimation_effort_output=state.get("estimation_effort_output", {}),
+            tdd_output=state.get("tdd_output", {}),
         )
 
         response = await service.process(request)
 
         return {
-            "stories_output": response.model_dump(),
-            "status": "stories_generated",
+            "jira_stories_output": response.model_dump(),
+            "status": "jira_stories_generated",
             "current_agent": "code_impact",
             "messages": [
                 {
-                    "role": "stories",
-                    "content": f"Generated {response.total_stories} stories ({response.total_story_points} points)",
+                    "role": "jira_stories",
+                    "content": f"Generated {response.story_count} Jira stories ({response.total_story_points} points)",
                 }
             ],
         }
@@ -287,32 +294,35 @@ async def stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 
 | Method | Path | Description | Response |
 |--------|------|-------------|----------|
-| `POST` | `/impact/generate/stories` | Generate Jira stories | `StoriesResponse` |
+| `POST` | `/api/v1/jira-stories` | Generate Jira stories | `JiraStoriesResponse` |
 
 ### Request/Response Examples
 
-**Generate Stories:**
+**Generate Jira Stories:**
 
 ```bash
-curl -X POST http://localhost:8000/impact/generate/stories \
+curl -X POST http://localhost:8000/api/v1/jira-stories \
   -H "Content-Type: application/json" \
   -d '{
-    "session_id": "sess_20240115_103045_a1b2c3",
+    "session_id": "session-xxxx-yyyy",
     "requirement_text": "Build OAuth2 authentication with SSO support...",
     "selected_matches": [...],
-    "modules_output": {...},
-    "effort_output": {"total_dev_hours": 160, "total_qa_hours": 40, "story_points": 34}
+    "impacted_modules_output": {...},
+    "estimation_effort_output": {"total_dev_hours": 160, "total_qa_hours": 40, "story_points": 34},
+    "tdd_output": {...}
   }'
 ```
 
 Response:
 ```json
 {
-  "session_id": "sess_20240115_103045_a1b2c3",
-  "agent": "stories",
+  "session_id": "session-xxxx-yyyy",
+  "agent": "jira_stories",
   "stories": [
     {
+      "story_id": "STORY-001",
       "title": "Implement OAuth2 authorization code flow",
+      "description": "As a user, I want to authenticate via OAuth2 so that I can securely access the system.",
       "story_type": "Story",
       "story_points": 5,
       "acceptance_criteria": [
@@ -320,10 +330,13 @@ Response:
         "Authorization code is exchanged for tokens",
         "Access token is securely stored"
       ],
-      "priority": "HIGH"
+      "priority": "HIGH",
+      "labels": []
     },
     {
+      "story_id": "STORY-002",
       "title": "Configure SSO identity provider integration",
+      "description": "As an admin, I want to configure SSO so that users can login with corporate credentials.",
       "story_type": "Task",
       "story_points": 3,
       "acceptance_criteria": [
@@ -331,10 +344,13 @@ Response:
         "SAML assertions are validated",
         "User attributes are mapped correctly"
       ],
-      "priority": "HIGH"
+      "priority": "HIGH",
+      "labels": []
     },
     {
+      "story_id": "STORY-003",
       "title": "Research token refresh strategies",
+      "description": "Investigate different token refresh approaches to determine the best strategy.",
       "story_type": "Spike",
       "story_points": 2,
       "acceptance_criteria": [
@@ -342,12 +358,13 @@ Response:
         "Evaluate silent refresh vs. explicit refresh",
         "Recommend approach for mobile clients"
       ],
-      "priority": "MEDIUM"
+      "priority": "MEDIUM",
+      "labels": []
     }
   ],
-  "total_stories": 10,
+  "story_count": 10,
   "total_story_points": 34,
-  "generated_at": "2024-01-15T10:30:45.123456"
+  "generated_at": "2026-01-15T10:30:45.123456"
 }
 ```
 
@@ -395,12 +412,12 @@ effort_output.story_points ≈ Σ(story.story_points for each story)
 ## Audit Trail Output
 
 ```
-data/sessions/2024-01-15/sess_20240115_103045_a1b2c3/
+sessions/2026-01-15-HHMM/session-xxxx-yyyy/
 └── step3_agents/
-    └── agent_stories/
-        ├── input_prompt.txt     # Full prompt with modules + effort
+    └── agent_jira_stories/
+        ├── input_prompt.txt     # Full prompt with modules + effort + TDD
         ├── raw_response.txt     # Raw LLM output
-        └── parsed_output.json   # Validated StoriesResponse
+        └── parsed_output.json   # Validated JiraStoriesResponse
 ```
 
 ---
@@ -412,13 +429,14 @@ data/sessions/2024-01-15/sess_20240115_103045_a1b2c3/
 │                    WORKFLOW POSITION                         │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  ┌──────────┐      ┌──────────┐      ┌─────────────┐        │
-│  │  effort  │─────▶│ stories  │─────▶│ code_impact │──▶...  │
-│  │          │      │  (HERE)  │      │             │        │
-│  └──────────┘      └──────────┘      └─────────────┘        │
+│  ┌──────────┐      ┌─────────────┐      ┌─────────────┐     │
+│  │   tdd    │─────▶│ jira_stories│─────▶│ code_impact │──▶..│
+│  │          │      │   (HERE)    │      │             │     │
+│  └──────────┘      └─────────────┘      └─────────────┘     │
 │                                                              │
-│  Input: requirement_text, modules_output, effort_output      │
-│  Output: stories_output                                      │
+│  Input: requirement_text, impacted_modules_output,           │
+│         estimation_effort_output, tdd_output                 │
+│  Output: jira_stories_output                                 │
 │  Next: current_agent = "code_impact"                         │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘

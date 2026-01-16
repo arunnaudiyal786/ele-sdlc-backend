@@ -4,6 +4,7 @@ from typing import Dict, List
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import JiraStoriesRequest, JiraStoriesResponse, JiraStoryItem
 from .prompts import JIRA_STORIES_SYSTEM_PROMPT, JIRA_STORIES_USER_PROMPT
@@ -50,7 +51,7 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
         response = JiraStoriesResponse(
             session_id=request.session_id,
             stories=stories,
-            total_stories=len(stories),
+            story_count=len(stories),
             total_story_points=total_points,
             generated_at=datetime.now(),
         )
@@ -80,8 +81,8 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
         return f"Architecture: {tdd_output.get('architecture_pattern', 'N/A')}, Components: {', '.join(tdd_output.get('technical_components', [])[:5])}"
 
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="jira_stories")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(f"Failed to parse: {e}", component="jira_stories")

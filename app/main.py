@@ -102,3 +102,27 @@ async def get_config():
         "search_semantic_weight": settings.search_semantic_weight,
         "search_keyword_weight": settings.search_keyword_weight,
     }
+
+
+@app.get("/api/v1/samples/requirement")
+async def get_sample_requirement():
+    """Get sample requirement data for testing."""
+    import json
+    from pathlib import Path
+
+    sample_path = Path("data/input/new_req.txt")
+    if sample_path.exists():
+        try:
+            content = json.loads(sample_path.read_text())
+            return {
+                "requirement_text": content.get("requirement_text", ""),
+                "jira_epic_id": content.get("jira_epic_id", ""),
+            }
+        except Exception:
+            pass
+
+    # Fallback sample data
+    return {
+        "requirement_text": "Refactor the legacy SOAP-based Customer API to a RESTful microservices architecture. The new API should support JSON payloads, implement OAuth 2.0 authentication, use pagination for large datasets, and include comprehensive OpenAPI documentation.",
+        "jira_epic_id": "SDLC-5001",
+    }

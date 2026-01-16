@@ -22,7 +22,17 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Initialize/rebuild vector database
 python scripts/init_vector_db.py
-python scripts/reindex.py  # Delete existing before rebuild
+python scripts/reindex.py && python scripts/init_vector_db.py  # Full reindex
+
+# Testing
+pytest                                       # Run all tests
+pytest -v                                    # Verbose output
+pytest tests/test_file.py                    # Single file
+pytest tests/test_file.py::test_function     # Single test
+pytest --asyncio-mode=auto                   # Async tests
+
+# Verify Ollama is running
+curl http://localhost:11434/api/tags
 ```
 
 ## Architecture
@@ -64,12 +74,17 @@ Agents return partial state updates (only changed fields). State is defined in `
 - `session_id`, `requirement_text` - Input
 - `extracted_keywords`, `all_matches`, `selected_matches` - Intermediate
 - `status`, `current_agent`, `error_message` - Control flow
+- `messages` - Accumulated via `operator.add` reducer (append-only)
+
+Status progression: `created → requirement_submitted → matches_found → matches_selected → impacted_modules_generated → estimation_effort_completed → tdd_generated → jira_stories_generated → code_impact_generated → risks_generated → completed`
 
 ### RAG Layer (`app/rag/`)
 
 - `embeddings.py` - Ollama embedding service
-- `vector_store.py` - ChromaDB wrapper (singleton pattern)
+- `vector_store.py` - ChromaDB wrapper (singleton via `get_instance()`)
 - `hybrid_search.py` - Fuses semantic (70%) and keyword (30%) scores
+
+Singleton pattern: Services use `@classmethod get_instance()` for thread-safe singletons. Settings use `@lru_cache` in `get_settings()`.
 
 ### Configuration
 
@@ -94,9 +109,22 @@ All under `/api/v1/`:
 ## Data Storage
 
 - `data/chroma/` - ChromaDB vector indices (epics, estimations, tdds collections)
-- `data/raw/` - Source CSV files for indexing
+- `data/raw/` - Source CSV files for indexing (epics.csv, estimations.csv, tdds.csv, stories_tasks.csv, gitlab_code.json)
 - `data/uploads/` - Uploaded requirement files
-- `sessions/` - Session audit trails (JSON logs per session)
+- `sessions/` - Session audit trails per session, organized by date/session_id
+
+Session output structure:
+```
+sessions/{date}/{session_id}/
+├── step1_input/           # requirement.json, extracted_keywords.json
+├── step2_search/          # search_request.json, all_matches.json, selected_matches.json
+├── step3_agents/
+│   ├── agent_tdd/         # input_prompt.txt, raw_response.txt, tdd.md, parsed_output.json
+│   └── ...
+└── final_summary.json
+```
+
+Use `AuditTrailManager(session_id)` in services to save artifacts (see `app/utils/audit.py`).
 
 ## Adding a New Component
 

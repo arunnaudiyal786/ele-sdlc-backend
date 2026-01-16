@@ -6,8 +6,9 @@ from ..impacted_modules.agent import impacted_modules_agent
 from ..estimation_effort.agent import estimation_effort_agent
 from ..tdd.agent import tdd_agent
 from ..jira_stories.agent import jira_stories_agent
-from ..code_impact.agent import code_impact_agent
-from ..risks.agent import risks_agent
+# Temporarily disabled agents
+# from ..code_impact.agent import code_impact_agent
+# from ..risks.agent import risks_agent
 
 
 async def error_handler_node(state: ImpactAssessmentState) -> dict:
@@ -101,7 +102,9 @@ def create_impact_workflow() -> StateGraph:
 
     Workflow:
     requirement -> historical_match -> auto_select -> impacted_modules
-    -> estimation_effort -> tdd -> jira_stories -> code_impact -> risks -> END
+    -> estimation_effort -> tdd -> jira_stories -> END
+
+    Note: code_impact and risks agents are temporarily disabled.
     """
     workflow = StateGraph(ImpactAssessmentState)
 
@@ -113,8 +116,9 @@ def create_impact_workflow() -> StateGraph:
     workflow.add_node("estimation_effort", estimation_effort_agent)
     workflow.add_node("tdd", tdd_agent)
     workflow.add_node("jira_stories", jira_stories_agent)
-    workflow.add_node("code_impact", code_impact_agent)
-    workflow.add_node("risks", risks_agent)
+    # Temporarily disabled nodes
+    # workflow.add_node("code_impact", code_impact_agent)
+    # workflow.add_node("risks", risks_agent)
     workflow.add_node("error_handler", error_handler_node)
 
     # Set entry point
@@ -135,9 +139,12 @@ def create_impact_workflow() -> StateGraph:
     workflow.add_edge("impacted_modules", "estimation_effort")
     workflow.add_edge("estimation_effort", "tdd")
     workflow.add_edge("tdd", "jira_stories")
-    workflow.add_edge("jira_stories", "code_impact")
-    workflow.add_edge("code_impact", "risks")
-    workflow.add_edge("risks", END)
+    # End after jira_stories (code_impact and risks disabled)
+    workflow.add_edge("jira_stories", END)
+    # Temporarily disabled edges
+    # workflow.add_edge("jira_stories", "code_impact")
+    # workflow.add_edge("code_impact", "risks")
+    # workflow.add_edge("risks", END)
     workflow.add_edge("error_handler", END)
 
     return workflow.compile()

@@ -4,6 +4,7 @@ from typing import Dict, List
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import EstimationEffortRequest, EstimationEffortResponse, EffortBreakdown
 from .prompts import ESTIMATION_EFFORT_SYSTEM_PROMPT, ESTIMATION_EFFORT_USER_PROMPT
@@ -78,8 +79,8 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         return "\n".join(lines) if lines else "No historical data."
 
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="estimation_effort")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(f"Failed to parse: {e}", component="estimation_effort")

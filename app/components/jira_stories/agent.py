@@ -35,7 +35,7 @@ async def jira_stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             "messages": [
                 {
                     "role": "jira_stories",
-                    "content": f"Generated {response.total_stories} Jira stories ({response.total_story_points} points)",
+                    "content": f"Generated {response.story_count} Jira stories ({response.total_story_points} points)",
                 }
             ],
         }

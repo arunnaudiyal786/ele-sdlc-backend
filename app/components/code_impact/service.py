@@ -4,6 +4,7 @@ from typing import Dict
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
+from app.utils.json_repair import parse_llm_json
 from app.utils.audit import AuditTrailManager
 from .models import CodeImpactRequest, CodeImpactResponse, CodeFile
 from .prompts import CODE_IMPACT_SYSTEM_PROMPT, CODE_IMPACT_USER_PROMPT
@@ -11,6 +12,19 @@ from .prompts import CODE_IMPACT_SYSTEM_PROMPT, CODE_IMPACT_USER_PROMPT
 
 class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
     """Code impact analysis agent as a component."""
+
+    # Map LLM variations to valid change_type values
+    CHANGE_TYPE_MAPPING = {
+        "CREATE": "CREATE",
+        "MODIFY": "MODIFY",
+        "DELETE": "DELETE",
+        "REDESIGN": "MODIFY",
+        "REFACTOR": "MODIFY",
+        "UPDATE": "MODIFY",
+        "ADD": "CREATE",
+        "NEW": "CREATE",
+        "REMOVE": "DELETE",
+    }
 
     def __init__(self):
         self.ollama = get_ollama_client()
@@ -42,7 +56,7 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
         audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_code_impact")
 
         parsed = self._parse_response(raw_response)
-        files = [CodeFile(**f) for f in parsed.get("files", [])]
+        files = [CodeFile(**self._normalize_file(f)) for f in parsed.get("files", [])]
         repos = list(set(f.repository for f in files))
 
         response = CodeImpactResponse(
@@ -75,8 +89,14 @@ class CodeImpactService(BaseComponent[CodeImpactRequest, CodeImpactResponse]):
         return "\n".join(lines) if lines else "No stories."
 
     def _parse_response(self, raw: str) -> Dict:
-        """Parse LLM JSON response."""
+        """Parse LLM JSON response with automatic repair."""
         try:
-            return json.loads(raw)
+            return parse_llm_json(raw, component_name="code_impact")
         except json.JSONDecodeError as e:
             raise ResponseParsingError(f"Failed to parse: {e}", component="code_impact")
+
+    def _normalize_file(self, file_data: Dict) -> Dict:
+        """Normalize LLM file data to match CodeFile schema."""
+        change_type = file_data.get("change_type", "MODIFY").upper()
+        file_data["change_type"] = self.CHANGE_TYPE_MAPPING.get(change_type, "MODIFY")
+        return file_data
