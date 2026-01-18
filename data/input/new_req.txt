@@ -1,6 +1,6 @@
 {
-  "session_id": "api-modernization-001",
-  "requirement_text": "Refactor the legacy SOAP-based Customer API to a RESTful microservices architecture. The new API should support JSON payloads, implement OAuth 2.0 authentication, use pagination for large datasets, and include comprehensive OpenAPI documentation.",
-  "jira_epic_id": "SDLC-5001",
+  "session_id": "inventory-fulfillment-004",
+  "requirement_text": "Implement an intelligent inventory management module with predictive stock replenishment, cross-location inventory balancing, and automated purchase order generation. System should integrate with supplier APIs for real-time pricing and availability, support barcode/RFID scanning for warehouse operations, and provide low-stock alerts with configurable thresholds.",
+  "jira_epic_id": "EPIC-004",
   "selected_matches": []
 }

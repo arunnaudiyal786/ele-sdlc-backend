@@ -1,5 +1,6 @@
 {
-  "requirement_text": "Refactor the legacy SOAP-based Customer API to a RESTful microservices architecture. The new API should support JSON payloads, implement OAuth 2.0 authentication, use pagination for large datasets, and include comprehensive OpenAPI documentation.",
-  "jira_epic_id": "SDLC-5001",
+  "session_id": "order-management-003",
+  "requirement_text": "Redesign order processing workflow to support real-time inventory synchronization, multi-warehouse fulfillment, automated order routing, and integration with shipping carriers (FedEx, UPS, USPS). Include order tracking and notification system.",
+  "jira_epic_id": "EPIC-003",
   "selected_matches": []
 }
