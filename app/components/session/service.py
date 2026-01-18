@@ -6,7 +6,13 @@ from typing import Optional
 from app.components.base.component import BaseComponent
 from app.components.base.config import get_settings
 from app.components.base.exceptions import SessionNotFoundError
-from .models import SessionCreateRequest, SessionResponse, SessionAuditResponse
+from .models import (
+    SessionCreateRequest,
+    SessionResponse,
+    SessionAuditResponse,
+    SessionSummaryItem,
+    SessionListResponse,
+)
 
 
 class SessionService(BaseComponent[SessionCreateRequest, SessionResponse]):
@@ -85,6 +91,132 @@ class SessionService(BaseComponent[SessionCreateRequest, SessionResponse]):
         metadata = self._load_metadata(session_dir)
         metadata["status"] = status
         self._save_metadata(session_dir, metadata)
+
+    async def list_sessions(self, limit: int = 50, offset: int = 0) -> SessionListResponse:
+        """List all sessions with summaries, sorted by created_at descending."""
+        all_sessions: list[SessionSummaryItem] = []
+
+        if not self.sessions_path.exists():
+            return SessionListResponse(sessions=[], total=0, limit=limit, offset=offset)
+
+        # Iterate through all date folders and session folders
+        for date_folder in self.sessions_path.iterdir():
+            if not date_folder.is_dir():
+                continue
+            for session_dir in date_folder.iterdir():
+                if not session_dir.is_dir():
+                    continue
+                metadata_file = session_dir / "session_metadata.json"
+                if not metadata_file.exists():
+                    continue
+
+                try:
+                    metadata = self._load_metadata(session_dir)
+                    # Ensure required fields exist with fallbacks
+                    metadata = self._ensure_metadata_fields(session_dir, metadata)
+                    summary = self._build_session_summary(session_dir, metadata)
+                    all_sessions.append(summary)
+                except (json.JSONDecodeError, KeyError) as e:
+                    # Log but skip corrupted sessions
+                    print(f"Skipping session {session_dir.name}: {e}")
+                    continue
+
+        # Sort by created_at descending (newest first)
+        all_sessions.sort(key=lambda s: s.created_at, reverse=True)
+
+        # Apply pagination
+        total = len(all_sessions)
+        paginated = all_sessions[offset : offset + limit]
+
+        return SessionListResponse(
+            sessions=paginated,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    def _build_session_summary(
+        self, session_dir: Path, metadata: dict
+    ) -> SessionSummaryItem:
+        """Build a session summary from metadata and optional final_summary."""
+        requirement_text = None
+        jira_epic_id = None
+        total_story_points = None
+        total_hours = None
+
+        # Try to load requirement text from step1_input
+        req_file = session_dir / "step1_input" / "requirement.json"
+        if req_file.exists():
+            try:
+                with open(req_file) as f:
+                    req_data = json.load(f)
+                    full_text = req_data.get("requirement_text", "")
+                    # Truncate to 200 chars
+                    requirement_text = full_text[:200] + "..." if len(full_text) > 200 else full_text
+                    jira_epic_id = req_data.get("jira_epic_id")
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # Try to load metrics from final_summary
+        summary_file = session_dir / "final_summary.json"
+        if summary_file.exists():
+            try:
+                with open(summary_file) as f:
+                    summary_data = json.load(f)
+                    # Extract story points - check both key formats for compatibility
+                    jira_output = (
+                        summary_data.get("jira_stories_output")
+                        or summary_data.get("jira_stories")
+                        or {}
+                    )
+                    total_story_points = jira_output.get("total_story_points")
+                    # Extract hours - check both key formats for compatibility
+                    estimation_output = (
+                        summary_data.get("estimation_effort_output")
+                        or summary_data.get("estimation_effort")
+                        or {}
+                    )
+                    total_hours = estimation_output.get("total_hours")
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        return SessionSummaryItem(
+            session_id=metadata["session_id"],
+            created_at=datetime.fromisoformat(metadata["created_at"]),
+            status=metadata.get("status", "unknown"),
+            requirement_text=requirement_text,
+            jira_epic_id=jira_epic_id,
+            total_story_points=total_story_points,
+            total_hours=total_hours,
+        )
+
+    def _ensure_metadata_fields(self, session_dir: Path, metadata: dict) -> dict:
+        """Ensure required metadata fields exist with fallbacks."""
+        # Fallback session_id to directory name
+        if "session_id" not in metadata:
+            metadata["session_id"] = session_dir.name
+
+        # Fallback created_at to file modification time or parse from date folder
+        if "created_at" not in metadata:
+            metadata_file = session_dir / "session_metadata.json"
+            if metadata_file.exists():
+                # Use file modification time as fallback
+                mtime = metadata_file.stat().st_mtime
+                metadata["created_at"] = datetime.fromtimestamp(mtime).isoformat()
+            else:
+                # Parse from parent folder name (format: YYYY-MM-DD-HHMM)
+                try:
+                    date_folder_name = session_dir.parent.name
+                    parsed_date = datetime.strptime(date_folder_name, "%Y-%m-%d-%H%M")
+                    metadata["created_at"] = parsed_date.isoformat()
+                except ValueError:
+                    metadata["created_at"] = datetime.now().isoformat()
+
+        # Ensure status has a default
+        if "status" not in metadata:
+            metadata["status"] = "unknown"
+
+        return metadata
 
     def _find_session_dir(self, session_id: str) -> Optional[Path]:
         """Find session directory by ID."""

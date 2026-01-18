@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from .service import SessionService
-from .models import SessionCreateRequest, SessionResponse, SessionAuditResponse
+from .models import SessionCreateRequest, SessionResponse, SessionAuditResponse, SessionListResponse
 from app.components.base.exceptions import ComponentError
 
 router = APIRouter(prefix="/session", tags=["Session"])
@@ -22,6 +22,16 @@ async def create_session(
 ) -> SessionResponse:
     """Create a new assessment session."""
     return await service.process(request)
+
+
+@router.get("/list", response_model=SessionListResponse)
+async def list_sessions(
+    limit: int = 50,
+    offset: int = 0,
+    service: SessionService = Depends(get_service),
+) -> SessionListResponse:
+    """List all assessment sessions with summaries."""
+    return await service.list_sessions(limit=limit, offset=offset)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)

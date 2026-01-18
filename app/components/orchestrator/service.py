@@ -116,9 +116,39 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
         )
 
     async def get_summary(self, session_id: str) -> Dict[str, Any]:
-        """Get summary for a completed session."""
+        """Get summary for a completed session including historical matches."""
         audit = AuditTrailManager(session_id)
-        return audit.load_json("final_summary.json")
+        raw_summary = audit.load_json("final_summary.json")
+
+        if not raw_summary:
+            raw_summary = {}
+
+        # Map keys to frontend expected format (with _output suffix)
+        summary: Dict[str, Any] = {
+            "session_id": raw_summary.get("session_id", session_id),
+            "status": raw_summary.get("status", "unknown"),
+            "impacted_modules_output": raw_summary.get("impacted_modules") or raw_summary.get("impacted_modules_output"),
+            "estimation_effort_output": raw_summary.get("estimation_effort") or raw_summary.get("estimation_effort_output"),
+            "tdd_output": raw_summary.get("tdd") or raw_summary.get("tdd_output"),
+            "jira_stories_output": raw_summary.get("jira_stories") or raw_summary.get("jira_stories_output"),
+            "code_impact_output": raw_summary.get("code_impact") or raw_summary.get("code_impact_output"),
+            "risks_output": raw_summary.get("risks") or raw_summary.get("risks_output"),
+            "messages": raw_summary.get("messages", []),
+            "error_message": raw_summary.get("error_message"),
+        }
+
+        # Load historical matches from step2 if available
+        all_matches = audit.load_json("step2_historical_match/all_matches.json")
+        if all_matches:
+            summary["historical_matches"] = all_matches
+
+        # Load requirement input for context
+        requirement = audit.load_json("step1_input/requirement.json")
+        if requirement:
+            summary["requirement_text"] = requirement.get("requirement_text")
+            summary["extracted_keywords"] = requirement.get("extracted_keywords", [])
+
+        return summary
 
     def _format_sse_event(self, event: StreamEvent) -> str:
         """Format event as SSE string."""

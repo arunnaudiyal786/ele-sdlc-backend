@@ -25,3 +25,22 @@ class SessionAuditResponse(BaseModel):
     steps_completed: List[str]
     timing: Dict[str, int]
     data: Dict
+
+
+class SessionSummaryItem(BaseModel):
+    """Summary of a single session for list view."""
+    session_id: str
+    created_at: datetime
+    status: str
+    requirement_text: Optional[str] = None  # First 200 chars
+    jira_epic_id: Optional[str] = None
+    total_story_points: Optional[int] = None
+    total_hours: Optional[int] = None
+
+
+class SessionListResponse(BaseModel):
+    """Response for listing sessions."""
+    sessions: List[SessionSummaryItem]
+    total: int
+    limit: int
+    offset: int
