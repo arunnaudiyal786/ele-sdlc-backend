@@ -33,6 +33,9 @@ pytest --asyncio-mode=auto                   # Async tests
 
 # Verify Ollama is running
 curl http://localhost:11434/api/tags
+
+# Health check
+curl http://localhost:8000/api/v1/health
 ```
 
 ## Architecture
@@ -41,8 +44,10 @@ curl http://localhost:11434/api/tags
 
 ```
 requirement → historical_match → auto_select → impacted_modules
-           → estimation_effort → tdd → jira_stories → code_impact → risks → END
+           → estimation_effort → tdd → jira_stories → END
 ```
+
+(Note: `code_impact` and `risks` agents exist but are currently disabled in the workflow)
 
 Workflow defined in `app/components/orchestrator/workflow.py`. Each agent is a node that receives state and returns partial state updates.
 
@@ -85,6 +90,10 @@ Status progression: `created → requirement_submitted → matches_found → mat
 - `hybrid_search.py` - Fuses semantic (70%) and keyword (30%) scores
 
 Singleton pattern: Services use `@classmethod get_instance()` for thread-safe singletons. Settings use `@lru_cache` in `get_settings()`.
+
+### LLM Response Parsing
+
+Agents use `app/utils/json_repair.py` to handle malformed LLM JSON responses. Always use `parse_llm_json()` instead of raw `json.loads()` when parsing Ollama outputs - it handles common issues like trailing commas, unquoted keys, and truncated responses.
 
 ### Configuration
 
@@ -131,10 +140,25 @@ Use `AuditTrailManager(session_id)` in services to save artifacts (see `app/util
 1. Create `app/components/{name}/` directory
 2. Add `models.py` with Pydantic request/response types
 3. Create service extending `BaseComponent[TRequest, TResponse]`
-4. Add agent wrapper function for LangGraph
+4. Add agent wrapper function for LangGraph (see `tdd/agent.py` for pattern)
 5. Create router with FastAPI endpoints
 6. Register router in `app/main.py`
 7. Add node and edges in `orchestrator/workflow.py` if part of pipeline
+
+Agent wrapper pattern (from `tdd/agent.py`):
+```python
+async def my_agent(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node - returns partial state updates."""
+    service = get_service()
+    request = MyRequest(session_id=state["session_id"], ...)
+    response = await service.process(request)
+    return {
+        "my_output": response.model_dump(),
+        "status": "my_step_done",
+        "current_agent": "next_agent",
+        "messages": [{"role": "my_agent", "content": "..."}],
+    }
+```
 
 ## Cross-Repository Context
 
