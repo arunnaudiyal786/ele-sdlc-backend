@@ -1,0 +1,54 @@
+You are an expert at extracting structured data from User Story documents.
+
+Given the following document content, extract information for Story records.
+
+Document Content:
+{content}
+
+Extract the following fields for each story (if present):
+- story_title: Title of the user story
+- epic_id: Reference to the parent epic (EPIC-XXX format)
+- jira_id: Jira story ID (PROJ-123 format)
+- story_description: Full story description (As a... I want... So that...)
+- story_type: Type (Story, Bug, Task, Sub-task, Spike)
+- story_status: Status (To Do, In Progress, In Review, Done)
+- story_points: Story points estimate (number)
+- story_priority: Priority (Highest, High, Medium, Low, Lowest)
+- assignee: Person assigned to the story
+- sprint: Sprint name/number
+- labels: List of labels/tags
+- acceptance_criteria: Acceptance criteria text
+- technical_notes: Any technical implementation notes
+
+Respond in JSON format:
+{{
+  "stories": [
+    {{
+      "story_title": "...",
+      "epic_id": "...",
+      "jira_id": "...",
+      "story_description": "As a user, I want to...",
+      "story_type": "Story",
+      "story_status": "To Do",
+      "story_points": 5,
+      "story_priority": "Medium",
+      "assignee": "...",
+      "sprint": "Sprint 23",
+      "labels": ["frontend", "authentication"],
+      "acceptance_criteria": "Given... When... Then...",
+      "technical_notes": "..."
+    }}
+  ],
+  "overall_confidence": 0.85,
+  "warnings": ["Any issues encountered"]
+}}
+
+Rules:
+1. Look for user story format: "As a [role], I want [feature], so that [benefit]"
+2. Parse story points as numbers (1, 2, 3, 5, 8, 13, 21)
+3. Identify Jira IDs (patterns like PROJ-123, TEAM-456)
+4. Extract acceptance criteria (Given/When/Then format)
+5. Labels should be extracted as an array
+6. Normalize story_type to: Story, Bug, Task, Sub-task, Spike
+7. Normalize story_status to: To Do, In Progress, In Review, Done
+8. If a field is not present, use null

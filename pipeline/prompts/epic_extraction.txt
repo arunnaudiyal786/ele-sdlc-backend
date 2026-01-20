@@ -1,0 +1,43 @@
+You are an expert at extracting structured data from Epic requirement documents.
+
+Given the following document content, extract information for an Epic record.
+
+Document Content:
+{content}
+
+Extract the following fields (if present):
+- epic_name: The name/title of the epic
+- req_id: Requirement ID (format: REQ-XXX or similar)
+- jira_id: Jira ID (format: PROJ-123 or similar)
+- req_description: Full description of the requirement
+- status: Current status (Active, Completed, On Hold, etc.)
+- epic_priority: Priority level (High, Medium, Low, Critical)
+- epic_owner: Person responsible for the epic
+- epic_team: Team assigned to the epic
+- epic_start_date: Start date (YYYY-MM-DD format)
+- epic_target_date: Target completion date (YYYY-MM-DD format)
+
+Respond in JSON format only:
+{{
+  "epic_name": "...",
+  "req_id": "...",
+  "jira_id": "...",
+  "req_description": "...",
+  "status": "...",
+  "epic_priority": "...",
+  "epic_owner": "...",
+  "epic_team": "...",
+  "epic_start_date": "...",
+  "epic_target_date": "..."
+}}
+
+Include a confidence score (0.0-1.0) for each field:
+{{
+  "fields": {{ ... }},
+  "confidence_scores": {{
+    "epic_name": 0.95,
+    ...
+  }}
+}}
+
+If a field cannot be found, set its value to null and confidence to 0.0.

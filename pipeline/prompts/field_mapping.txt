@@ -1,0 +1,52 @@
+You are an expert at mapping source document fields to target schema fields.
+
+Given the following source fields extracted from a document:
+{source_fields}
+
+And the target schema with these fields:
+{target_fields}
+
+Suggest mappings from source fields to target fields.
+
+For each target field, identify:
+1. The best matching source field (if any)
+2. Confidence score (0.0-1.0) for the mapping
+3. Brief reasoning for the mapping
+
+Consider:
+- Field names may be abbreviated or use different conventions
+- Values might need transformation (dates, numbers, enums)
+- Some source fields may map to multiple target fields
+- Some target fields may have no matching source field
+
+Respond in JSON format:
+{{
+  "mappings": [
+    {{
+      "source_field": "dev_hours",
+      "target_field": "estimated_dev_hours",
+      "confidence": 0.95,
+      "source_value": "8h",
+      "reasoning": "Field names match semantically, value is numeric hours"
+    }},
+    {{
+      "source_field": "owner",
+      "target_field": "epic_owner",
+      "confidence": 0.85,
+      "source_value": "John Smith",
+      "reasoning": "Owner field maps to epic_owner, contains person name"
+    }}
+  ],
+  "unmapped_target_fields": ["field1", "field2"],
+  "unmapped_source_fields": ["extra_field"],
+  "transformation_notes": [
+    "dev_hours needs parsing: '8h' -> 8.0",
+    "date fields need YYYY-MM-DD normalization"
+  ]
+}}
+
+Mapping priority:
+1. Exact name match (highest confidence)
+2. Semantic similarity (e.g., "dev_hours" -> "estimated_dev_hours")
+3. Value type match (date, number, text patterns)
+4. Context clues from surrounding data

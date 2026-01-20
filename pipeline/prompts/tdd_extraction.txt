@@ -1,0 +1,56 @@
+You are an expert at extracting structured data from Technical Design Documents (TDDs).
+
+Given the following TDD document content, extract information for a TDD record.
+
+Document Content:
+{content}
+
+Extract the following fields (if present):
+- tdd_name: Name/title of the TDD
+- epic_id: Reference to the parent epic (EPIC-XXX format)
+- dev_est_id: Reference to the estimation (EST-XXX format)
+- tdd_description: Full description/summary of the technical design
+- tdd_author: Author of the TDD
+- tdd_reviewer: Reviewer(s) of the TDD
+- tdd_status: Status (Draft, In Review, Approved, Implemented)
+- technical_components: List of technical components involved
+- tdd_dependencies: List of dependencies (other systems, APIs, etc.)
+- architecture_changes: Description of architecture changes
+- database_changes: Description of database changes
+- api_changes: Description of API changes
+- security_considerations: Security-related notes
+- performance_considerations: Performance-related notes
+- testing_strategy: Testing approach
+
+Respond in JSON format:
+{{
+  "fields": {{
+    "tdd_name": "...",
+    "epic_id": "...",
+    "dev_est_id": "...",
+    "tdd_description": "...",
+    "tdd_author": "...",
+    "tdd_reviewer": "...",
+    "tdd_status": "...",
+    "technical_components": ["component1", "component2"],
+    "tdd_dependencies": ["dep1", "dep2"],
+    "architecture_changes": "...",
+    "database_changes": "...",
+    "api_changes": "...",
+    "security_considerations": "...",
+    "performance_considerations": "...",
+    "testing_strategy": "..."
+  }},
+  "confidence_scores": {{
+    "tdd_name": 0.95,
+    "epic_id": 0.8,
+    ...
+  }}
+}}
+
+Rules:
+1. Look for section headers like "Technical Components", "Dependencies", "Architecture"
+2. Extract bullet points as arrays where appropriate
+3. Identify ID references (EPIC-XXX, EST-XXX, REQ-XXX patterns)
+4. If a field cannot be found, set its value to null and confidence to 0.0
+5. For status, normalize to: Draft, In Review, Approved, Implemented

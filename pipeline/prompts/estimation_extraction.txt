@@ -1,0 +1,52 @@
+You are an expert at extracting structured data from software estimation spreadsheets.
+
+Given the following table data from an estimation document, extract information for Estimation records.
+
+Table Headers:
+{headers}
+
+Table Rows:
+{rows}
+
+For each row, extract the following fields:
+- module_name: Name of the module/component being estimated
+- epic_id: Reference to the parent epic (if mentioned)
+- dev_est_id: Development estimation ID
+- task_description: Description of the task
+- estimated_dev_hours: Development hours estimate (number)
+- estimated_qa_hours: QA hours estimate (number)
+- estimated_ba_hours: BA hours estimate (number)
+- estimated_pm_hours: PM hours estimate (number)
+- complexity: Complexity level (Simple, Medium, Complex, High, Very High)
+- assumptions: Any assumptions made
+- dependencies: Dependencies on other work
+- risks: Known risks
+
+Respond in JSON format with an array of extracted estimations:
+{{
+  "estimations": [
+    {{
+      "module_name": "...",
+      "epic_id": "...",
+      "dev_est_id": "...",
+      "task_description": "...",
+      "estimated_dev_hours": 8.0,
+      "estimated_qa_hours": 4.0,
+      "estimated_ba_hours": 2.0,
+      "estimated_pm_hours": 1.0,
+      "complexity": "Medium",
+      "assumptions": "...",
+      "dependencies": "...",
+      "risks": "..."
+    }}
+  ],
+  "overall_confidence": 0.85,
+  "warnings": ["Any issues encountered"]
+}}
+
+Rules:
+1. Parse numeric values carefully - convert "8h", "8 hours" to 8.0
+2. If hours are combined (e.g., "16h dev+QA"), try to split them
+3. Look for patterns like "EPIC-123" or "REQ-456" for epic_id references
+4. Normalize complexity values to: Simple, Medium, Complex, High, Very High
+5. If a field is not present, use null

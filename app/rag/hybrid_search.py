@@ -94,8 +94,8 @@ class HybridSearchService:
                         "keyword_score": keyword_score,
                         "final_score": final_score,
                         "score_breakdown": {
-                            "semantic": round(semantic_score, 4),
-                            "keyword": round(keyword_score, 4),
+                            "semantic_score": round(semantic_score, 4),
+                            "keyword_score": round(keyword_score, 4),
                         },
                     })
             except Exception:

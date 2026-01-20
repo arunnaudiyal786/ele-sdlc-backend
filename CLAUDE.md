@@ -163,3 +163,151 @@ async def my_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 ## Cross-Repository Context
 
 Frontend at `../ele-sdlc-frontend/` consumes this API. When modifying endpoints, check frontend dependencies. API contract changes require coordination.
+
+---
+
+## Data Engineering Pipeline
+
+A separate FastAPI service (port 8001) for processing source documents into structured CSV files that feed the main assessment system's vector database.
+
+### Pipeline Overview
+
+```
+Source Documents (DOCX, XLSX)
+         ↓
+    [EXTRACT] → Structured fields from documents
+         ↓
+    [MAP] → Field mapping to target schema
+         ↓
+    [TRANSFORM] → Normalized data with IDs/FKs
+         ↓
+    [VALIDATE] → Schema + relationship checks
+         ↓
+    [EXPORT] → CSV files → data/raw/
+```
+
+### Pipeline Commands
+
+```bash
+# Start pipeline API (port 8001)
+uvicorn pipeline.main:app --host 0.0.0.0 --port 8001 --reload
+
+# Or use the module directly
+python -m pipeline.main
+
+# Run batch processor (watches inbox folder)
+python -m pipeline.watchers.batch_processor
+```
+
+### Pipeline Structure
+
+```
+pipeline/
+├── api/routes/          # FastAPI endpoints
+│   ├── health.py        # GET /health
+│   ├── upload.py        # POST /upload, GET /jobs/{id}/files
+│   ├── extract.py       # POST /extract/{id}, GET /mapping-suggestions/{id}
+│   ├── transform.py     # POST /transform/{id}
+│   ├── preview.py       # GET /preview/{id}, GET /validation/{id}
+│   ├── export.py        # POST /export/{id}, GET /export/{id}/{entity}
+│   └── batch.py         # Batch processing endpoints
+├── core/
+│   ├── config.py        # PipelineSettings (pydantic-settings)
+│   ├── id_generator.py  # ID generation (EPIC-001, EST-001, etc.)
+│   └── relationship_manager.py  # FK tracking, position-based linking
+├── extractors/
+│   ├── base.py          # BaseExtractor, ExtractedData dataclass
+│   ├── docx_extractor.py   # python-docx extraction
+│   ├── excel_extractor.py  # openpyxl extraction
+│   └── llm_extractor.py    # Ollama enhancement for low-confidence extractions
+├── transformers/
+│   ├── base.py          # BaseTransformer, TransformationResult
+│   ├── normalizers.py   # date_normalizer, array_to_json_string, etc.
+│   ├── epic_transformer.py
+│   ├── estimation_transformer.py
+│   ├── tdd_transformer.py
+│   └── story_transformer.py
+├── models/
+│   ├── api_models.py    # Request/Response Pydantic models
+│   ├── pipeline_job.py  # PipelineJob, JobStatus, JobStep enums
+│   └── source_documents.py  # SourceDocument, DocumentType
+├── services/
+│   └── job_tracker.py   # Job state management
+├── watchers/
+│   ├── folder_watcher.py   # watchdog-based file monitoring
+│   └── batch_processor.py  # Automated pipeline execution
+├── prompts/             # LLM prompt templates
+└── main.py              # FastAPI application
+```
+
+### Pipeline Data Directories
+
+```
+data/pipeline/
+├── inbox/       # Drop files here for batch processing
+├── processing/  # Files being processed
+├── completed/   # Successful job outputs
+├── failed/      # Failed job files
+├── jobs/        # Job state and artifacts
+│   └── {job_id}/
+│       ├── state.json
+│       ├── uploads/
+│       ├── extracted/
+│       ├── transformed/
+│       └── exported/
+└── output/      # Final CSV outputs
+```
+
+### Two Modes of Operation
+
+**Interactive Mode** (API-driven):
+1. `POST /upload` - Upload files, get job_id
+2. `POST /extract/{job_id}` - Extract structured data
+3. `GET /mapping-suggestions/{job_id}` - Get AI-suggested field mappings
+4. `POST /apply-mapping/{job_id}` - Confirm mappings
+5. `POST /transform/{job_id}` - Transform to target schema
+6. `GET /validation/{job_id}` - Validate relationships
+7. `POST /export/{job_id}` - Export CSVs
+
+**Batch Mode** (folder watcher):
+- Drop files in `data/pipeline/inbox/`
+- Files are auto-grouped by project prefix
+- Full pipeline runs automatically
+- Output appears in `data/pipeline/completed/`
+
+### Target CSV Schemas
+
+Schemas in `shared/schemas/` match existing `data/raw/*.csv` files:
+- `Epic` - 13 columns (epic_id, epic_name, req_id, jira_id, ...)
+- `Estimation` - 15 columns (estimation_id, module_name, epic_id, ...)
+- `TDD` - 16 columns (tdd_id, tdd_name, epic_id, dev_est_id, ...)
+- `Story` - 17 columns (story_id, story_title, epic_id, jira_id, ...)
+
+### ID Generation Pattern
+
+- `EPIC-001`, `EPIC-002`, ... (per job)
+- `EST-001`, `EST-002`, ...
+- `TDD-001`, `TDD-002`, ...
+- `STORY-001`, `STORY-002`, ...
+- `MOD-{entity_prefix}-001` for modules
+
+### Relationship Linking
+
+Position-based FK linking:
+- First epic links to first estimation
+- Estimations link to corresponding TDDs by order
+- Stories link to epics by position
+
+### Configuration
+
+Settings in `config/pipeline_settings.yaml`:
+- Pipeline port (8001)
+- Directory paths
+- Ollama settings
+- Extraction/transformation defaults
+- Batch processing options
+
+Override with environment variables:
+- `PIPELINE_PORT`, `PIPELINE_DEBUG`
+- `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
+- `EXTRACTION_LLM_CONFIDENCE_THRESHOLD`

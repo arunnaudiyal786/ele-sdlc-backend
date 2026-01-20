@@ -1,0 +1,143 @@
+# Data Engineering Pipeline Configuration
+# ========================================
+# This file configures the pipeline for processing source documents
+# (DOCX, XLSX) into structured CSV files.
+
+# Pipeline Service Settings
+pipeline:
+  # Port for the pipeline API (separate from main API on 8000)
+  port: 8001
+
+  # Enable debug mode (verbose logging)
+  debug: false
+
+# Directory Paths
+paths:
+  # Base directory for all pipeline data
+  base: "data/pipeline"
+
+  # Job state and artifacts storage
+  jobs: "data/pipeline/jobs"
+
+  # Batch mode inbox (drop files here for auto-processing)
+  inbox: "data/pipeline/inbox"
+
+  # Files currently being processed
+  processing: "data/pipeline/processing"
+
+  # Successfully processed output
+  completed: "data/pipeline/completed"
+
+  # Failed job files
+  failed: "data/pipeline/failed"
+
+  # Final CSV output directory
+  output: "data/pipeline/output"
+
+# File Upload Limits
+upload:
+  # Maximum DOCX file size in MB
+  docx_max_size_mb: 10
+
+  # Maximum Excel file size in MB
+  excel_max_size_mb: 50
+
+# Ollama LLM Settings
+ollama:
+  # Ollama service URL
+  base_url: "http://localhost:11434"
+
+  # Model for text generation/extraction
+  model: "phi3:mini"
+
+  # Model for embeddings (if needed)
+  embedding_model: "all-minilm"
+
+  # Request timeout in seconds
+  timeout: 60
+
+  # Temperature for generation (0.0-1.0)
+  temperature: 0.1
+
+  # Maximum tokens to generate
+  max_tokens: 4096
+
+# Extraction Settings
+extraction:
+  # Confidence threshold below which LLM enhancement is triggered
+  llm_confidence_threshold: 0.7
+
+  # Use LLM enhancement by default
+  use_llm_enhancement: true
+
+  # Maximum rows to extract from Excel tables
+  max_table_rows: 1000
+
+# Transformation Settings
+transformation:
+  # Default values for missing fields
+  defaults:
+    status: "Active"
+    priority: "Medium"
+    complexity: "Medium"
+    story_type: "Story"
+    story_status: "To Do"
+
+  # Date format for output
+  date_format: "%Y-%m-%d"
+
+  # Datetime format for output
+  datetime_format: "%Y-%m-%dT%H:%M:%S"
+
+# Validation Settings
+validation:
+  # Require all FK references to be valid
+  strict_fk_validation: false
+
+  # Warn on missing optional fields
+  warn_missing_optional: true
+
+# Batch Processing Settings
+batch:
+  # Enable batch mode (folder watcher)
+  enabled: true
+
+  # Polling interval for file stability check (seconds)
+  file_stability_seconds: 2.0
+
+  # Maximum concurrent batch jobs
+  max_concurrent_jobs: 3
+
+  # Auto-retry failed jobs
+  auto_retry_failed: false
+
+# Export Settings
+export:
+  # CSV encoding
+  encoding: "utf-8"
+
+  # Include BOM for Excel compatibility
+  include_bom: false
+
+  # Delimiter character
+  delimiter: ","
+
+  # Quote character
+  quotechar: "\""
+
+# CORS Settings (for API)
+cors:
+  origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+
+# Logging Settings
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Log file path (null for stdout only)
+  file: null

@@ -53,6 +53,9 @@ class PipelineResponse(BaseModel):
     """Response with full impact assessment."""
     session_id: str
     status: str
+    historical_matches: list[Dict] = []
+    requirement_text: str | None = None
+    extracted_keywords: list[str] = []
     impacted_modules_output: Dict | None = None
     estimation_effort_output: Dict | None = None
     tdd_output: Dict | None = None
@@ -102,9 +105,16 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
             "risks": final_state.get("risks_output"),
         })
 
+        # Load historical matches and requirement data for response
+        all_matches = audit.load_json("step2_historical_match/all_matches.json")
+        requirement_data = audit.load_json("step1_input/requirement.json")
+
         return PipelineResponse(
             session_id=request.session_id,
             status=final_state.get("status", "unknown"),
+            historical_matches=all_matches if isinstance(all_matches, list) else [],
+            requirement_text=requirement_data.get("requirement_text") if requirement_data else request.requirement_text,
+            extracted_keywords=requirement_data.get("extracted_keywords", []) if requirement_data else [],
             impacted_modules_output=final_state.get("impacted_modules_output"),
             estimation_effort_output=final_state.get("estimation_effort_output"),
             tdd_output=final_state.get("tdd_output"),
@@ -235,6 +245,10 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
                 "risks": final_state.get("risks_output"),
             })
 
+            # Load historical matches for final output
+            all_matches = audit.load_json("step2_historical_match/all_matches.json")
+            requirement_data = audit.load_json("step1_input/requirement.json")
+
             # Emit pipeline_complete event with final outputs
             yield self._format_sse_event(StreamEvent(
                 type="pipeline_complete",
@@ -244,6 +258,8 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
                     status=final_state.get("status", "completed"),
                     progress_percent=100,
                     output={
+                        "historical_matches": all_matches if all_matches else [],
+                        "requirement_text": requirement_data.get("requirement_text") if requirement_data else None,
                         "impacted_modules_output": final_state.get("impacted_modules_output"),
                         "estimation_effort_output": final_state.get("estimation_effort_output"),
                         "tdd_output": final_state.get("tdd_output"),
