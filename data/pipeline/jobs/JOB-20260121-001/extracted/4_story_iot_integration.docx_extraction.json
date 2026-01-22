@@ -1,0 +1,41 @@
+{
+  "raw_content": "User Story - Build IoT Device Integration Layer\nMMO-12352: Build IoT Device Integration Layer\nDescription\nImplement MQTT-based integration layer for medical IoT devices supporting vitals streaming from Philips, GE Healthcare, Medtronic, Siemens, and Mindray patient monitors. Include device authentication via X.509 certificates, message validation, protocol translation, and fault-tolerant message buffering.\nAcceptance Criteria\n1. MQTT broker (Mosquitto) deployed with TLS 1.3 and certificate-based device auth\n2. Device adapters for 5 manufacturers parse proprietary protocols to standard vitals format\n3. Vitals messages validated against HL7 FHIR Observation schema\n4. Message buffering handles up to 1 hour of device disconnect\n5. Device connection status monitored with heartbeat mechanism\n6. End-to-end latency from device to Kafka topic is <2 seconds\n7. Unit tests cover all device adapters with 90% coverage\nTechnical Notes\nUse paho-mqtt library for MQTT client connections\nImplement adapte...",
+  "sections": [
+    "Introduction",
+    "MMO-12352: Build IoT Device Integration Layer",
+    "Description",
+    "Acceptance Criteria",
+    "Technical Notes",
+    "Dependencies"
+  ],
+  "fields": {
+    "network_team": {
+      "value": "VPN/firewall rules for device connectivity",
+      "confidence": 0.9
+    },
+    "security_team": {
+      "value": "X.509 certificate authority setup",
+      "confidence": 0.9
+    },
+    "infrastructure": {
+      "value": "MQTT broker deployment and monitoring",
+      "confidence": 0.9
+    }
+  },
+  "tables_count": 1,
+  "lists_count": 3,
+  "key_value_pairs": {
+    "Network team": "VPN/firewall rules for device connectivity",
+    "Security team": "X.509 certificate authority setup",
+    "Infrastructure": "MQTT broker deployment and monitoring"
+  },
+  "jira_ids": [],
+  "emails": [],
+  "dates": [],
+  "overall_confidence": 0.8999999999999999,
+  "warnings": [],
+  "metadata": {
+    "filename": "4_story_iot_integration.docx",
+    "file_type": "docx"
+  }
+}

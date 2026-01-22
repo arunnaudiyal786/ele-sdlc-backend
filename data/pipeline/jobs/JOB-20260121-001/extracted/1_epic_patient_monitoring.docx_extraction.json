@@ -1,0 +1,25 @@
+{
+  "raw_content": "Epic Requirements Document\nEPIC-008: Real-Time Patient Monitoring System\nEpic Description\nBuild a comprehensive real-time patient monitoring system for healthcare providers to track vital signs, receive alerts for critical conditions, and coordinate care across care teams. The system must integrate with medical devices (IoT), support telemedicine workflows, ensure HIPAA compliance, and provide mobile access for clinicians.\nBusiness Objectives\nEnable real-time monitoring of patient vital signs from hospital beds and remote locations\nReduce response time to critical patient events by 60%\nSupport telemedicine consultations with integrated vitals display\nImprove care coordination across multi-disciplinary teams\nMeet all HIPAA and medical device integration regulations\nAcceptance Criteria\nIntegration with at least 5 major medical device manufacturers (Philips, GE, Medtronic)\nReal-time vitals streaming with <2 second latency\nConfigurable alert thresholds per patient condition\nMobile app for ...",
+  "sections": [
+    "Introduction",
+    "EPIC-008: Real-Time Patient Monitoring System",
+    "Epic Description",
+    "Business Objectives",
+    "Acceptance Criteria",
+    "Technical Requirements",
+    "Dependencies"
+  ],
+  "fields": {},
+  "tables_count": 1,
+  "lists_count": 4,
+  "key_value_pairs": {},
+  "jira_ids": [],
+  "emails": [],
+  "dates": [],
+  "overall_confidence": 0.7999999999999999,
+  "warnings": [],
+  "metadata": {
+    "filename": "1_epic_patient_monitoring.docx",
+    "file_type": "docx"
+  }
+}

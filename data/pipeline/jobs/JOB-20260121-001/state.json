@@ -1,0 +1,85 @@
+{
+  "job_id": "JOB-20260121-001",
+  "job_type": "interactive",
+  "status": "extracted",
+  "current_step": null,
+  "steps_completed": [
+    "upload",
+    "extract"
+  ],
+  "files_uploaded": [
+    {
+      "filename": "1_epic_patient_monitoring.docx",
+      "file_path": "data/pipeline/jobs/JOB-20260121-001/uploads/1_epic_patient_monitoring.docx",
+      "file_size": 37859,
+      "document_type": "epic",
+      "uploaded_at": "2026-01-21T01:09:36.148735Z"
+    },
+    {
+      "filename": "3_estimation_patient_monitoring.xlsx",
+      "file_path": "data/pipeline/jobs/JOB-20260121-001/uploads/3_estimation_patient_monitoring.xlsx",
+      "file_size": 5775,
+      "document_type": "estimation",
+      "uploaded_at": "2026-01-21T01:09:36.150242Z"
+    },
+    {
+      "filename": "2_tdd_patient_monitoring.docx",
+      "file_path": "data/pipeline/jobs/JOB-20260121-001/uploads/2_tdd_patient_monitoring.docx",
+      "file_size": 38698,
+      "document_type": "tdd",
+      "uploaded_at": "2026-01-21T01:09:36.150874Z"
+    },
+    {
+      "filename": "4_story_iot_integration.docx",
+      "file_path": "data/pipeline/jobs/JOB-20260121-001/uploads/4_story_iot_integration.docx",
+      "file_size": 37706,
+      "document_type": "story",
+      "uploaded_at": "2026-01-21T01:09:36.151428Z"
+    }
+  ],
+  "extraction_results": {
+    "1_epic_patient_monitoring.docx": {
+      "document_type": "epic",
+      "fields_count": 0,
+      "tables_count": 1,
+      "jira_ids": [],
+      "emails": [],
+      "confidence": 0.7999999999999999,
+      "warnings": []
+    },
+    "3_estimation_patient_monitoring.xlsx": {
+      "error": "object of type 'generator' has no len()",
+      "confidence": 0.0
+    },
+    "2_tdd_patient_monitoring.docx": {
+      "document_type": "tdd",
+      "fields_count": 26,
+      "tables_count": 1,
+      "jira_ids": [
+        "AES-256"
+      ],
+      "emails": [],
+      "confidence": 0.95,
+      "warnings": []
+    },
+    "4_story_iot_integration.docx": {
+      "document_type": "story",
+      "fields_count": 6,
+      "tables_count": 1,
+      "jira_ids": [],
+      "emails": [],
+      "confidence": 0.8999999999999999,
+      "warnings": []
+    }
+  },
+  "mapping_results": null,
+  "transformation_results": null,
+  "validation_results": null,
+  "export_results": null,
+  "created_at": "2026-01-21T01:09:36.145606Z",
+  "updated_at": "2026-01-21T01:17:46.394279Z",
+  "completed_at": null,
+  "error_message": null,
+  "warnings": [],
+  "metadata": {}
+}

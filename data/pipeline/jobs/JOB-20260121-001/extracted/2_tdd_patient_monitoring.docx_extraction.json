@@ -1,0 +1,97 @@
+{
+  "raw_content": "Technical Design Document\nTDD-008: Real-Time Patient Monitoring Architecture\n1. Technical Overview\nThe Real-Time Patient Monitoring System is a distributed architecture designed to collect, process, and visualize patient vital signs from medical IoT devices. The system uses an event-driven microservices architecture with real-time streaming, complex event processing for alerts, and FHIR-compliant data storage.\n2. Architecture Pattern\nEvent-Driven Microservices + Pub/Sub Pattern + CEP (Complex Event Processing)\n3. Technical Components\nPython: Backend services and CEP engine\nFastAPI: REST API layer\nPostgreSQL + TimescaleDB: Time-series vitals storage\nApache Kafka: Event streaming backbone\nMQTT Broker (Mosquitto): IoT device communication\nRedis: Real-time alert cache and session storage\nReact + TypeScript: Web dashboard\nReact Native: Mobile apps (iOS/Android)\nWebSockets: Real-time dashboard updates\nHL7 FHIR SDK: Healthcare data standards\n4. Design Decisions\nUse MQTT for device communicati...",
+  "sections": [
+    "Introduction",
+    "TDD-008: Real-Time Patient Monitoring Architecture",
+    "1. Technical Overview",
+    "2. Architecture Pattern",
+    "3. Technical Components",
+    "4. Design Decisions",
+    "5. System Dependencies",
+    "6. Security Considerations",
+    "7. Performance Requirements",
+    "8. Data Flow"
+  ],
+  "fields": {
+    "python": {
+      "value": "Backend services and CEP engine",
+      "confidence": 0.9
+    },
+    "fastapi": {
+      "value": "REST API layer",
+      "confidence": 0.9
+    },
+    "apache_kafka": {
+      "value": "Event streaming backbone",
+      "confidence": 0.9
+    },
+    "redis": {
+      "value": "Real-time alert cache and session storage",
+      "confidence": 0.9
+    },
+    "react_native": {
+      "value": "Mobile apps (iOS/Android)",
+      "confidence": 0.9
+    },
+    "websockets": {
+      "value": "Real-time dashboard updates",
+      "confidence": 0.9
+    },
+    "hipaa_compliance_mandatory": {
+      "value": "PHI encryption at rest (AES-256) and in transit (TLS 1.3)",
+      "confidence": 0.9
+    },
+    "vitals_ingestion": {
+      "value": "<2 second end-to-end latency from device to dashboard",
+      "confidence": 0.9
+    },
+    "alert_generation": {
+      "value": "<1 second from threshold breach to notification",
+      "confidence": 0.9
+    },
+    "dashboard_update_rate": {
+      "value": "1Hz (one update per second) for real-time vitals",
+      "confidence": 0.9
+    },
+    "system_uptime": {
+      "value": "99.99% SLA (less than 53 minutes downtime per year)",
+      "confidence": 0.9
+    },
+    "mobile_app_offline_mode": {
+      "value": "Queue alerts for up to 24 hours",
+      "confidence": 0.9
+    },
+    "historical_query": {
+      "value": "<3 seconds for 30-day patient vitals timeline",
+      "confidence": 0.9
+    }
+  },
+  "tables_count": 1,
+  "lists_count": 3,
+  "key_value_pairs": {
+    "Python": "Backend services and CEP engine",
+    "FastAPI": "REST API layer",
+    "Apache Kafka": "Event streaming backbone",
+    "Redis": "Real-time alert cache and session storage",
+    "React Native": "Mobile apps (iOS/Android)",
+    "WebSockets": "Real-time dashboard updates",
+    "HIPAA compliance mandatory": "PHI encryption at rest (AES-256) and in transit (TLS 1.3)",
+    "Vitals ingestion": "<2 second end-to-end latency from device to dashboard",
+    "Alert generation": "<1 second from threshold breach to notification",
+    "Dashboard update rate": "1Hz (one update per second) for real-time vitals",
+    "System uptime": "99.99% SLA (less than 53 minutes downtime per year)",
+    "Mobile app offline mode": "Queue alerts for up to 24 hours",
+    "Historical query": "<3 seconds for 30-day patient vitals timeline"
+  },
+  "jira_ids": [
+    "AES-256"
+  ],
+  "emails": [],
+  "dates": [],
+  "overall_confidence": 0.95,
+  "warnings": [],
+  "metadata": {
+    "filename": "2_tdd_patient_monitoring.docx",
+    "file_type": "docx"
+  }
+}
