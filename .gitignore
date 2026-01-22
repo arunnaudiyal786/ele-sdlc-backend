@@ -39,7 +39,7 @@ output/*.png
 *.log
 logs/
 
-./claude
+.claude/
 
 output/
 sessions/
