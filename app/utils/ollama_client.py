@@ -1,9 +1,30 @@
 import httpx
-from typing import Optional, List
+from typing import Optional, List, Tuple
+from dataclasses import dataclass, asdict
+from datetime import datetime
 from app.components.base.config import get_settings
 from app.components.base.exceptions import OllamaUnavailableError, OllamaTimeoutError
 
 _client: Optional["OllamaClient"] = None
+
+
+@dataclass
+class LLMRequestMetadata:
+    """Complete metadata for an LLM request to Ollama."""
+    model: str
+    system_prompt: Optional[str]
+    user_prompt: str
+    temperature: float
+    max_tokens: int
+    format: Optional[str]
+    timeout: int
+    base_url: str
+    stream: bool
+    timestamp: str  # ISO 8601 format
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
 
 
 class OllamaClient:
@@ -23,8 +44,22 @@ class OllamaClient:
         user_prompt: str,
         system_prompt: Optional[str] = None,
         format: Optional[str] = None,
-    ) -> str:
-        """Generate text using Ollama."""
+    ) -> Tuple[str, LLMRequestMetadata]:
+        """Generate text using Ollama and return response with request metadata."""
+        # Create metadata before request
+        metadata = LLMRequestMetadata(
+            model=self.gen_model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            format=format,
+            timeout=self.timeout,
+            base_url=self.base_url,
+            stream=False,
+            timestamp=datetime.now().isoformat(),
+        )
+
         payload = {
             "model": self.gen_model,
             "prompt": user_prompt,
@@ -45,7 +80,7 @@ class OllamaClient:
                     f"{self.base_url}/api/generate", json=payload
                 )
                 response.raise_for_status()
-                return response.json().get("response", "")
+                return response.json().get("response", ""), metadata
         except httpx.TimeoutException:
             raise OllamaTimeoutError(
                 f"Ollama request timed out after {self.timeout}s", component="ollama"

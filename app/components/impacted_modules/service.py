@@ -32,12 +32,14 @@ class ImpactedModulesService(BaseComponent[ImpactedModulesRequest, ImpactedModul
         audit = AuditTrailManager(request.session_id)
         audit.save_text("input_prompt.txt", f"{IMPACTED_MODULES_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_impacted_modules")
 
-        raw_response = await self.ollama.generate(
+        raw_response, llm_metadata = await self.ollama.generate(
             system_prompt=IMPACTED_MODULES_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             format="json",
         )
 
+        # Save LLM request metadata
+        audit.save_json("llm_request.json", llm_metadata.to_dict(), subfolder="step3_agents/agent_impacted_modules")
         audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_impacted_modules")
 
         parsed = self._parse_response(raw_response)

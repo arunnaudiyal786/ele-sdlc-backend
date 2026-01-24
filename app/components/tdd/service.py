@@ -36,12 +36,14 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
         audit = AuditTrailManager(request.session_id)
         audit.save_text("input_prompt.txt", f"{TDD_SYSTEM_PROMPT}\n\n{user_prompt}", subfolder="step3_agents/agent_tdd")
 
-        raw_response = await self.ollama.generate(
+        raw_response, llm_metadata = await self.ollama.generate(
             system_prompt=TDD_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             format="json",
         )
 
+        # Save LLM request metadata
+        audit.save_json("llm_request.json", llm_metadata.to_dict(), subfolder="step3_agents/agent_tdd")
         audit.save_text("raw_response.txt", raw_response, subfolder="step3_agents/agent_tdd")
 
         parsed = self._parse_response(raw_response)
