@@ -194,15 +194,23 @@ Before running the application, you must populate the ChromaDB vector store with
 
 ### Prepare Data Files
 
-Ensure your data files exist in `data/raw/`:
+Ensure your data files and project folders exist in `data/raw/`:
 
 ```
 data/raw/
-├── epics.csv
-├── estimations.csv
-├── tdds.csv
-├── stories_tasks.csv
-└── gitlab_code.json
+├── epics.csv               # Epic definitions
+├── estimations.csv         # Estimation data
+├── tdds.csv                # TDD metadata
+├── stories_tasks.csv       # Jira stories
+├── gitlab_code.json        # Code references
+└── projects/               # Project folders (for document loading)
+    ├── PRJ-10051/
+    │   ├── tdd.docx        # Full TDD document
+    │   ├── estimation.xlsx # Full estimation sheet
+    │   └── jira_stories.docx # Full stories document
+    ├── PRJ-10052/
+    │   └── ...
+    └── ...
 ```
 
 ### Run Initialization Script
@@ -210,6 +218,10 @@ data/raw/
 ```bash
 python scripts/init_vector_db.py
 ```
+
+This creates multiple ChromaDB collections including:
+- **project_index** - Lightweight metadata for fast search
+- **epics, estimations, tdds, stories** - Full document data
 
 Expected output:
 
@@ -287,19 +299,54 @@ Or press `Ctrl+C` if running in foreground.
 
 ## API Endpoints
 
+### Health & Config
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/v1/health` | GET | Health check with Ollama status |
 | `/api/v1/config` | GET | Current configuration |
+| `/api/v1/samples/requirement` | GET | Sample requirement data |
+
+### Session Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/v1/sessions` | POST | Create analysis session |
-| `/api/v1/requirements` | GET/POST | Manage requirements |
-| `/api/v1/search` | POST | Semantic search |
-| `/api/v1/modules` | GET | Get modules |
-| `/api/v1/effort` | GET | Effort estimations |
-| `/api/v1/stories` | GET | Stories and tasks |
-| `/api/v1/code-impact` | GET | Code impact analysis |
-| `/api/v1/risks` | GET | Risk assessment |
-| `/api/v1/orchestrator` | POST | Full orchestration |
+| `/api/v1/sessions/{session_id}` | GET | Get session details |
+| `/api/v1/sessions` | GET | List all sessions |
+
+### Requirements
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/requirements/{session_id}` | POST | Submit requirement for session |
+
+### Historical Search
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/historical-matches/{session_id}` | POST | Search historical matches |
+| `/api/v1/select-matches/{session_id}` | POST | Select matches for analysis |
+
+### Pipeline Orchestration
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/impact/run-pipeline` | POST | Run full pipeline (blocking) |
+| `/api/v1/impact/run-pipeline/stream` | POST | Run pipeline with SSE streaming |
+| `/api/v1/impact/{session_id}/summary` | GET | Get assessment summary |
+
+### File Input
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/file-input/upload` | POST | Upload requirement file |
+
+### Project Search
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/project-search` | POST | Search project index |
 
 ### Interactive API Documentation
 
@@ -322,6 +369,14 @@ python scripts/reindex.py
 
 ```bash
 python scripts/init_vector_db.py
+```
+
+### Rebuild Project Index Only
+
+If you've added new project folders, rebuild just the project index:
+
+```bash
+python scripts/rebuild_project_index.py
 ```
 
 ### One-liner

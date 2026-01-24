@@ -86,11 +86,11 @@ Transform source enterprise documents into a structured knowledge base for AI-po
 │  │                        │   (Vector Store)          │                                 │    │
 │  │                        │                           │                                 │    │
 │  │                        │  Collections:             │                                 │    │
-│  │                        │  • epics                  │                                 │    │
-│  │                        │  • estimations            │                                 │    │
-│  │                        │  • tdds                   │                                 │    │
-│  │                        │  • stories                │                                 │    │
-│  │                        │  • gitlab_code            │                                 │    │
+│  │                        │  • project_index (PRIMARY)│                                 │    │
+│  │                        │    - Lightweight metadata │                                 │    │
+│  │                        │    - Fast matching        │                                 │    │
+│  │                        │  • epics, estimations     │                                 │    │
+│  │                        │  • tdds, stories (legacy) │                                 │    │
 │  │                        └───────────────────────────┘                                 │    │
 │  │                                                                                      │    │
 │  └──────────────────────────────────────────────────────────────────────────────────────┘    │
@@ -185,7 +185,7 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │  │  ━━━━━━━━━━━━━━━━━━━━━━━━                                                              │ │
 │  │  Input:  Keywords + requirement text                                                    │ │
 │  │  Action: Hybrid search (70% semantic + 30% keyword) across ChromaDB                     │ │
-│  │          • Search epics, estimations, tdds, stories collections                         │ │
+│  │          • Search project_index collection (lightweight metadata)                       │ │
 │  │  Output: all_matches[] (ranked by combined score)                                       │ │
 │  │  Status: matches_found                                                                  │ │
 │  │                                                                                          │ │
@@ -202,11 +202,15 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │    │                                                                                          │
 │    ▼                                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
-│  │  AGENT 3: AUTO-SELECT                                                                   │ │
-│  │  ━━━━━━━━━━━━━━━━━━━━━━                                                                │ │
+│  │  AGENT 3: AUTO-SELECT + DOCUMENT LOADER                                                 │ │
+│  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                                │ │
 │  │  Input:  all_matches[]                                                                  │ │
-│  │  Action: Select top 5 matches by score (or use pre-selected matches)                   │ │
-│  │  Output: selected_matches[] (top 5)                                                     │ │
+│  │  Action: 1. Select top 3 matches by score (or use pre-selected matches)                │ │
+│  │          2. Load FULL documents for selected projects via ContextAssembler:            │ │
+│  │             • TDD document (parsed) → TDDDocument                                       │ │
+│  │             • Estimation document (parsed) → EstimationDocument                         │ │
+│  │             • Jira stories document (parsed) → JiraStoriesDocument                      │ │
+│  │  Output: selected_matches[] (top 3) + loaded_projects{} (full documents)               │ │
 │  │  Status: matches_selected                                                               │ │
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
 │    │                                                                                          │
@@ -214,11 +218,12 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
 │  │  AGENT 4: IMPACTED MODULES                                                              │ │
 │  │  ━━━━━━━━━━━━━━━━━━━━━━━━                                                              │ │
-│  │  Input:  Requirement + selected matches                                                 │ │
+│  │  Input:  Requirement + loaded_projects (TDD module data)                                │ │
 │  │  Action: LLM analyzes to identify functional & technical modules impacted               │ │
 │  │  Output: functional_modules[], technical_modules[], impact_summary                      │ │
 │  │  Status: impacted_modules_generated                                                     │ │
 │  │                                                                                          │ │
+│  │  Context: module_list, interaction_flow, design_decisions from TDDs                     │ │
 │  │  Uses: Ollama (phi3:mini) for analysis                                                  │ │
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
 │    │                                                                                          │
@@ -251,7 +256,7 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
 │  │  AGENT 7: JIRA STORIES                                                                  │ │
 │  │  ━━━━━━━━━━━━━━━━━━━━━━━                                                               │ │
-│  │  Input:  Requirement + TDD + modules                                                    │ │
+│  │  Input:  Requirement + loaded_projects (existing stories + task breakdown)              │ │
 │  │  Action: LLM generates Jira user stories and sub-tasks                                  │ │
 │  │  Output: stories[] with summary, description, acceptance_criteria, story_points        │ │
 │  │  Status: jira_stories_generated → completed                                             │ │
@@ -265,7 +270,7 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 ├──────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
-│  │  AGENT 8: CODE IMPACT  [DISABLED]                                                       │ │
+│  │  CODE IMPACT AGENT  [DISABLED]                                                          │ │
 │  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                                      │ │
 │  │  Input:  Stories + historical code patterns                                             │ │
 │  │  Action: LLM identifies files/repos likely to be impacted                               │ │
@@ -276,7 +281,7 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
-│  │  AGENT 9: RISKS  [DISABLED]                                                             │ │
+│  │  RISKS AGENT  [DISABLED]                                                                 │ │
 │  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━                                                            │ │
 │  │  Input:  All previous outputs (modules, effort, TDD, stories, code impact)              │ │
 │  │  Action: LLM performs risk assessment                                                   │ │
@@ -296,7 +301,7 @@ EPIC/Requirement (1) ──► Estimation (1) ──► Jira Story (1) ──►
 │                                    STATE PROGRESSION                                         │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                              │
-│  CURRENT ACTIVE FLOW:                                                                        │
+│  CURRENT ACTIVE FLOW (7 agents):                                                             │
 │                                                                                              │
 │  created → requirement_submitted → matches_found → matches_selected                          │
 │                                                          │                                   │
@@ -439,10 +444,11 @@ sessions/{date}/{session_id}/
 | Aspect | Details |
 |--------|---------|
 | **Input** | New requirement description (text or JSON file) |
-| **Processing** | 7 active AI agents in sequence (2 additional agents pending) |
+| **Processing** | 7 active agents in sequence (2 additional agents pending) |
 | **AI Engine** | Ollama (local) - phi3:mini + all-minilm |
-| **Search** | Hybrid (70% semantic + 30% keyword) via ChromaDB |
-| **Output** | TDD, Effort Estimate, Jira Stories (Code Impact & Risks coming soon) |
+| **Search** | Hybrid (70% semantic + 30% keyword) via ChromaDB project_index |
+| **Context** | Full documents loaded for top 3 matching projects |
+| **Output** | TDD, Effort Estimate, Jira Stories |
 | **Traceability** | Full audit trail saved per session |
 | **Real-time Updates** | Server-Sent Events (SSE) for live progress streaming |
 
@@ -462,9 +468,9 @@ sessions/{date}/{session_id}/
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Requirement Parsing | ✅ Active | Keyword extraction |
-| Historical Matching | ✅ Active | Hybrid search (semantic + keyword) |
-| Auto-Select | ✅ Active | Top 5 matches |
-| Impacted Modules | ✅ Active | LLM analysis |
+| Historical Matching | ✅ Active | Hybrid search via project_index |
+| Auto-Select + Doc Loading | ✅ Active | Top 3 matches + full document loading |
+| Impacted Modules | ✅ Active | LLM analysis with TDD context |
 | Effort Estimation | ✅ Active | Historical pattern matching |
 | TDD Generation | ✅ Active | Markdown output |
 | Jira Stories | ✅ Active | Story + task generation |
@@ -473,5 +479,5 @@ sessions/{date}/{session_id}/
 
 ---
 
-*Document Version: 1.1*
+*Document Version: 2.0*
 *Last Updated: January 2026*

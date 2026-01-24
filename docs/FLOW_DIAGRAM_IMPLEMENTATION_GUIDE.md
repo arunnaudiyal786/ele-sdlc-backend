@@ -1,728 +1,727 @@
-# Portfolio Website Implementation Guide
+# Flow Diagram Implementation Guide
 
-## Overview
-This guide documents the visual design system and implementation patterns of a personal portfolio website. Use this to recreate similar visualizations for your own application.
+Comprehensive visual guide to the AI Impact Assessment System's data flows, state transitions, and integration patterns.
 
----
+## Table of Contents
 
-## Visual Design System
-
-### Color Palette
-```
-Background: #F3F4F6 (gray-100)
-Card Background: #FFFFFF (white)
-Primary Text: #1F2937 (gray-800)
-Secondary Text: #4B5563 (gray-600)
-Accent: #2563EB (blue-600)
-Accent Light: #DBEAFE (blue-100)
-Accent Text: #1E40AF (blue-800)
-```
-
-### Typography Scale
-```
-Heading 1: 2.25rem (36px) - font-bold
-Heading 2: 1.5rem (24px) - font-semibold
-Body: 1.25rem (20px) - text-xl
-Small: 0.875rem (14px) - text-sm
-```
-
-### Spacing System
-```
-Section Padding: 2rem (p-8)
-Vertical Spacing: 2rem (mb-8)
-Header Padding: 4rem vertical (py-16)
-Icon Spacing: 1.5rem (space-x-6)
-Badge Gap: 1rem (gap-4)
-```
-
-### Shadow & Border System
-```
-Card Shadow: shadow-md (0 4px 6px -1px rgba(0,0,0,0.1))
-Image Shadow: shadow-lg (0 10px 15px -3px rgba(0,0,0,0.1))
-Border Radius: rounded-lg (0.5rem)
-Circle: rounded-full (9999px)
-```
+- [System Overview Flow](#system-overview-flow)
+- [LangGraph Workflow Flow](#langgraph-workflow-flow)
+- [Agent Execution Flow](#agent-execution-flow)
+- [Hybrid Search Flow](#hybrid-search-flow)
+- [Context Assembly Flow](#context-assembly-flow)
+- [State Progression Flow](#state-progression-flow)
+- [SSE Streaming Flow](#sse-streaming-flow)
+- [Error Handling Flow](#error-handling-flow)
+- [Data Storage Flow](#data-storage-flow)
 
 ---
 
-## Component Architecture
+## System Overview Flow
 
-### 1. Header Component
-**Visual Pattern:** Centered layout with circular profile image, name, and tagline
+High-level view of how a requirement flows through the entire system.
 
-```html
-<header class="text-center py-16">
-    <img id="profile-image"
-         src="[IMAGE_URL]"
-         alt="[NAME]"
-         class="mx-auto rounded-full w-48 h-48 object-cover mb-6 shadow-lg">
-    <h1 id="name" class="text-4xl font-bold text-gray-800 mb-4">[NAME]</h1>
-    <p id="tagline" class="text-xl text-gray-600">[TAGLINE]</p>
-</header>
 ```
-
-**Key Visual Features:**
-- 192px × 192px (w-48 h-48) circular image
-- Center-aligned with `mx-auto`
-- Large shadow for depth
-- Vertical spacing progression: image (mb-6) → name (mb-4) → tagline
-
----
-
-### 2. Card Section Component
-**Visual Pattern:** White card with shadow, rounded corners, consistent padding
-
-```html
-<section id="[SECTION_ID]" class="bg-white shadow-md rounded-lg p-8 mb-8">
-    <h2 class="text-2xl font-semibold mb-4 text-gray-800">[SECTION_TITLE]</h2>
-    <!-- Section content here -->
-</section>
-```
-
-**Styling Breakdown:**
-- `bg-white`: Clean background contrasting with gray-100 page background
-- `shadow-md`: Subtle elevation for visual hierarchy
-- `rounded-lg`: Soft corners (8px radius)
-- `p-8`: Generous internal padding (2rem)
-- `mb-8`: Consistent spacing between sections (2rem)
-
-**Usage:** Wrap any content block to create a visual "card" container
-
----
-
-### 3. Skills Badge Component
-**Visual Pattern:** Data-driven badge grid with dynamic content injection
-
-**HTML Container:**
-```html
-<div id="skills-list" class="flex flex-wrap gap-4">
-    <!-- Badges injected here via JavaScript -->
-</div>
-```
-
-**JavaScript Generation (Secure Approach):**
-```javascript
-const skills = [
-    'Web Development', 'JavaScript', 'React',
-    'Node.js', 'Python', 'Entrepreneurship',
-    'Product Strategy', 'Cloud Computing'
-];
-
-// Secure method using DOM methods
-const skillsList = document.getElementById('skills-list');
-skills.forEach(skill => {
-    const badge = document.createElement('span');
-    badge.className = 'bg-blue-100 text-blue-800 text-sm font-medium mr-2 px-2.5 py-0.5 rounded';
-    badge.textContent = skill; // Secure: prevents XSS
-    skillsList.appendChild(badge);
-});
-```
-
-**Alternative (Original Pattern - Use with trusted data only):**
-```javascript
-// WARNING: Only use with trusted, sanitized data
-// This pattern is vulnerable to XSS if data comes from user input
-skillsList.innerHTML = skills.map(skill =>
-    `<span class="bg-blue-100 text-blue-800 text-sm font-medium mr-2 px-2.5 py-0.5 rounded">
-        ${skill}
-    </span>`
-).join('');
-```
-
-**Badge Styling Breakdown:**
-- `bg-blue-100`: Light blue background (#DBEAFE)
-- `text-blue-800`: Dark blue text (#1E40AF) for contrast
-- `text-sm`: Small font size (0.875rem)
-- `font-medium`: Medium weight (500)
-- `px-2.5 py-0.5`: Compact padding (10px horizontal, 2px vertical)
-- `rounded`: Subtle rounded corners (0.25rem)
-- `mr-2`: Right margin for spacing between badges
-
-**Visual Effect:** Pill-shaped tags that wrap naturally on small screens
-
----
-
-### 4. Social Icon Component
-**Visual Pattern:** SVG icons with hover scale animation
-
-**HTML Structure:**
-```html
-<div class="flex justify-center space-x-6">
-    <a href="[URL]"
-       class="text-blue-600 hover:text-blue-800"
-       target="_blank"
-       rel="noopener noreferrer">
-        <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-            <!-- SVG path data -->
-        </svg>
-    </a>
-    <!-- More icons... -->
-</div>
-```
-
-**CSS Animation:**
-```css
-#contact a svg {
-    transition: transform 0.3s ease;
-}
-
-#contact a:hover svg {
-    transform: scale(1.2);
-}
-```
-
-**Key Features:**
-- `w-8 h-8`: 32px × 32px icon size
-- `space-x-6`: 1.5rem gap between icons
-- `fill="currentColor"`: Icon inherits text color
-- `hover:text-blue-800`: Color darkens on hover
-- `transform: scale(1.2)`: 20% size increase on hover
-- `transition: transform 0.3s ease`: Smooth animation
-
-**SVG Icons Used:**
-1. **LinkedIn**: Blue icon (`text-blue-600`)
-2. **Twitter**: Light blue icon (`text-blue-400`)
-3. **GitHub**: Gray icon (`text-gray-800`)
-
----
-
-## Implementation Flow
-
-### Step 1: HTML Structure
-Create semantic HTML with placeholder content:
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>[Your Title]</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal">
-    <div class="container mx-auto px-4">
-        <!-- Add components here -->
-    </div>
-    <script src="script.js"></script>
-</body>
-</html>
-```
-
-**Key Layout Decisions:**
-- `container mx-auto`: Centers content with max-width
-- `px-4`: Horizontal padding for mobile devices
-- `bg-gray-100`: Light gray background for contrast with white cards
-- `font-sans`: System font stack for clean typography
-
----
-
-### Step 2: Dynamic Content Injection
-Use JavaScript to populate content on page load:
-
-```javascript
-document.addEventListener('DOMContentLoaded', () => {
-    // Select DOM elements
-    const name = document.getElementById('name');
-    const tagline = document.getElementById('tagline');
-    const aboutText = document.getElementById('about-text');
-
-    // Update content (secure with textContent)
-    name.textContent = 'Your Name';
-    tagline.textContent = 'Your Title';
-    aboutText.textContent = 'Your biography...';
-
-    // Generate dynamic components
-    generateSkillsBadges();
-    setupSocialLinks();
-});
-
-function generateSkillsBadges() {
-    const skills = ['HTML', 'CSS', 'JavaScript'];
-    const container = document.getElementById('skills-list');
-
-    // Clear existing content
-    container.textContent = '';
-
-    // Create badges using DOM methods (secure)
-    skills.forEach(skill => {
-        const badge = document.createElement('span');
-        badge.className = 'bg-blue-100 text-blue-800 text-sm font-medium mr-2 px-2.5 py-0.5 rounded';
-        badge.textContent = skill;
-        container.appendChild(badge);
-    });
-}
-
-function setupSocialLinks() {
-    const socialLinks = {
-        'LinkedIn': 'https://www.linkedin.com/in/yourprofile',
-        'Twitter': 'https://twitter.com/yourprofile',
-        'GitHub': 'https://github.com/yourprofile'
-    };
-
-    const contactSection = document.getElementById('contact').querySelector('.flex');
-    const links = contactSection.getElementsByTagName('a');
-
-    Array.from(links).forEach((link, index) => {
-        const platform = Object.keys(socialLinks)[index];
-        link.href = socialLinks[platform] || '#';
-        link.setAttribute('target', '_blank');
-        link.setAttribute('rel', 'noopener noreferrer');
-    });
-}
-```
-
-**Why This Pattern:**
-- Separates content from structure
-- Easy to update content without touching HTML
-- Enables future integration with APIs or CMS
-- Content can be stored in variables/config objects
-- Uses secure DOM methods instead of innerHTML
-
----
-
-### Step 3: Custom Styling Layer
-Add CSS for animations and responsive behavior:
-
-```css
-/* Smooth scrolling for anchor links */
-body {
-    scroll-behavior: smooth;
-}
-
-/* Icon hover animation */
-#contact a svg {
-    transition: transform 0.3s ease;
-}
-
-#contact a:hover svg {
-    transform: scale(1.2);
-}
-
-/* Mobile responsive adjustments */
-@media (max-width: 640px) {
-    header {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-
-    #name {
-        font-size: 2.5rem;
-    }
-
-    #tagline {
-        font-size: 1.25rem;
-    }
-}
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          END-TO-END SYSTEM FLOW                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│   USER                    FRONTEND                    BACKEND                 │
+│  ┌─────┐                 ┌─────────┐                ┌─────────────────────┐  │
+│  │     │  Enter          │         │  POST          │                     │  │
+│  │  👤 │  Requirement    │ Next.js │  /impact/      │    FastAPI          │  │
+│  │     │ ────────────►   │   UI    │  run-pipeline  │    (Port 8000)      │  │
+│  └─────┘                 │         │ ──────────────►│                     │  │
+│     │                    └────┬────┘                └──────────┬──────────┘  │
+│     │                         │                                │              │
+│     │                         │   SSE Stream                   │              │
+│     │   View Progress         │◄───────────────────────────────┤              │
+│     │◄────────────────────────┤                                │              │
+│     │                         │                                ▼              │
+│     │                         │                    ┌───────────────────────┐ │
+│     │                         │                    │    LangGraph          │ │
+│     │                         │                    │    Workflow           │ │
+│     │                         │                    │                       │ │
+│     │                         │                    │  ┌─────────────────┐  │ │
+│     │                         │                    │  │ 7 Agents        │  │ │
+│     │                         │                    │  │ Sequential      │  │ │
+│     │                         │                    │  │ Execution       │  │ │
+│     │                         │                    │  └─────────────────┘  │ │
+│     │                         │                    │           │           │ │
+│     │                         │                    │           ▼           │ │
+│     │                         │                    │  ┌─────────────────┐  │ │
+│     │                         │                    │  │ ChromaDB Search │  │ │
+│     │                         │                    │  │ Ollama LLM      │  │ │
+│     │                         │                    │  └─────────────────┘  │ │
+│     │                         │                    └───────────────────────┘ │
+│     │                         │                                │              │
+│     │   View Results          │   Final Response               │              │
+│     │◄────────────────────────┤◄───────────────────────────────┘              │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Security Best Practices
+## LangGraph Workflow Flow
 
-### Avoid XSS Vulnerabilities
+Detailed view of the LangGraph workflow with all nodes and edges.
 
-**❌ Unsafe (vulnerable to XSS):**
-```javascript
-// NEVER do this with user input or untrusted data
-element.innerHTML = userInput;
-element.innerHTML = `<div>${untrustedData}</div>`;
 ```
-
-**✅ Safe alternatives:**
-
-1. **For plain text:**
-```javascript
-element.textContent = userInput; // Automatically escapes
-```
-
-2. **For creating elements:**
-```javascript
-const badge = document.createElement('span');
-badge.className = 'bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded';
-badge.textContent = userInput; // Safe
-container.appendChild(badge);
-```
-
-3. **For complex HTML with untrusted data:**
-```javascript
-// Use a sanitization library like DOMPurify
-import DOMPurify from 'dompurify';
-element.innerHTML = DOMPurify.sanitize(userInput);
-```
-
-### Link Security
-Always add security attributes to external links:
-```html
-<a href="[URL]" target="_blank" rel="noopener noreferrer">Link</a>
-```
-- `rel="noopener"`: Prevents access to window.opener
-- `rel="noreferrer"`: Doesn't send referrer information
-
----
-
-## Responsive Design Patterns
-
-### Breakpoint Strategy
-- **Desktop (≥640px):** Full spacing, large typography
-- **Mobile (<640px):** Reduced padding, scaled-down text
-
-### Responsive Components
-
-**Flexbox Wrapping:**
-```html
-<div class="flex flex-wrap gap-4">
-    <!-- Badges wrap to next line on small screens -->
-</div>
-```
-
-**Centered Flex Containers:**
-```html
-<div class="flex justify-center space-x-6">
-    <!-- Icons stack center-aligned -->
-</div>
-```
-
-**Container Behavior:**
-```html
-<div class="container mx-auto px-4">
-    <!-- Max-width on desktop, full-width on mobile with padding -->
-</div>
-```
-
----
-
-## Data Structure Patterns
-
-### Content Configuration Object
-Instead of hardcoded strings, use a config object:
-
-```javascript
-const profileData = {
-    personal: {
-        name: 'Ryan Carson',
-        tagline: 'Software Engineer & Entrepreneur',
-        about: 'Passionate technologist...',
-        image: 'https://via.placeholder.com/150'
-    },
-    skills: [
-        'Web Development', 'JavaScript', 'React',
-        'Node.js', 'Python', 'Entrepreneurship'
-    ],
-    social: {
-        linkedin: 'https://www.linkedin.com/in/ryancarson',
-        twitter: 'https://twitter.com/ryancarson',
-        github: 'https://github.com/ryancarson'
-    }
-};
-
-// Use the config
-document.getElementById('name').textContent = profileData.personal.name;
-document.getElementById('tagline').textContent = profileData.personal.tagline;
-```
-
-### Benefits
-- Single source of truth
-- Easy to extend with new fields
-- Can be moved to external JSON file
-- Enables A/B testing or multi-language support
-
----
-
-## Customization Guide
-
-### Change Color Scheme
-Replace Tailwind color classes:
-
-**Original (Blue accent):**
-```html
-<span class="bg-blue-100 text-blue-800">Badge</span>
-<a class="text-blue-600 hover:text-blue-800">Link</a>
-```
-
-**Alternative (Green accent):**
-```html
-<span class="bg-green-100 text-green-800">Badge</span>
-<a class="text-green-600 hover:text-green-800">Link</a>
-```
-
-**Available Colors:** gray, red, yellow, green, blue, indigo, purple, pink
-
----
-
-### Add New Section
-Follow the card section pattern:
-
-```html
-<section id="experience" class="bg-white shadow-md rounded-lg p-8 mb-8">
-    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Experience</h2>
-    <div id="experience-list">
-        <!-- Content here -->
-    </div>
-</section>
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         LANGGRAPH WORKFLOW FLOW                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│   START                                                                       │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  1. REQUIREMENT AGENT                                                   │  │
+│  │  ─────────────────────                                                  │  │
+│  │  Input:  requirement_text                                               │  │
+│  │  Action: Extract keywords, normalize text                               │  │
+│  │  Output: extracted_keywords[]                                           │  │
+│  │  Status: requirement_submitted                                          │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  2. HISTORICAL MATCH AGENT                                              │  │
+│  │  ───────────────────────────                                            │  │
+│  │  Input:  requirement_text + extracted_keywords                          │  │
+│  │  Action: Hybrid search (70% semantic + 30% keyword)                     │  │
+│  │          Search: project_index collection                               │  │
+│  │  Output: all_matches[] (ranked by combined score)                       │  │
+│  │  Status: matches_found                                                  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌─────────────────────┐                                                     │
+│  │ Conditional Edge    │                                                     │
+│  │ route_after_match() │                                                     │
+│  └──────────┬──────────┘                                                     │
+│             │                                                                 │
+│     ┌───────┴───────┐                                                        │
+│     ▼               ▼                                                        │
+│  [auto_select]  [error_handler] ──► END                                      │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  3. AUTO-SELECT NODE                                                    │  │
+│  │  ─────────────────────                                                  │  │
+│  │  Input:  all_matches[]                                                  │  │
+│  │  Action: 1. Select top 3 matches by score                               │  │
+│  │          2. Load full documents via ContextAssembler                    │  │
+│  │             - TDD document (parsed)                                     │  │
+│  │             - Estimation document (parsed)                              │  │
+│  │             - Jira stories document (parsed)                            │  │
+│  │  Output: selected_matches[], loaded_projects{}                          │  │
+│  │  Status: matches_selected                                               │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  4. IMPACTED MODULES AGENT                                              │  │
+│  │  ───────────────────────────                                            │  │
+│  │  Input:  requirement_text + loaded_projects (TDD module data)           │  │
+│  │  Action: LLM identifies functional & technical modules                  │  │
+│  │  Output: functional_modules[], technical_modules[], impact_summary      │  │
+│  │  Status: impacted_modules_generated                                     │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  5. ESTIMATION EFFORT AGENT                                             │  │
+│  │  ────────────────────────────                                           │  │
+│  │  Input:  requirement_text + loaded_projects (estimation data)           │  │
+│  │  Action: LLM estimates effort based on historical patterns              │  │
+│  │  Output: dev_hours, qa_hours, story_points, confidence_level            │  │
+│  │  Status: estimation_effort_completed                                    │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  6. TDD AGENT                                                           │  │
+│  │  ────────────                                                           │  │
+│  │  Input:  requirement_text + loaded_projects (full TDD data)             │  │
+│  │  Action: LLM generates Technical Design Document                        │  │
+│  │  Output: tdd_name, design_patterns, components[], tdd.md file           │  │
+│  │  Status: tdd_generated                                                  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  7. JIRA STORIES AGENT                                                  │  │
+│  │  ───────────────────────                                                │  │
+│  │  Input:  requirement_text + loaded_projects (jira stories data)         │  │
+│  │  Action: LLM generates user stories and tasks                           │  │
+│  │  Output: stories[] with summary, description, story_points              │  │
+│  │  Status: jira_stories_generated → completed                             │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│     │                                                                         │
+│     ▼                                                                         │
+│   END                                                                         │
+│                                                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                        DISABLED AGENTS (Future)                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  [DISABLED] CODE IMPACT AGENT                                           │  │
+│  │  Would analyze code repositories affected by requirement                │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  [DISABLED] RISKS AGENT                                                 │  │
+│  │  Would assess risks based on all previous outputs                       │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Change Layout Grid
-Convert sections to multi-column grid:
+## Agent Execution Flow
 
-```html
-<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-    <section class="bg-white shadow-md rounded-lg p-8">...</section>
-    <section class="bg-white shadow-md rounded-lg p-8">...</section>
-</div>
-```
-
-**Explanation:**
-- `grid-cols-1`: Single column on mobile
-- `md:grid-cols-2`: Two columns on medium screens (≥768px)
-- `gap-8`: 2rem spacing between grid items
-
----
-
-### Add Different Badge Styles
-**Outlined badges:**
-```javascript
-const badge = document.createElement('span');
-badge.className = 'border-2 border-blue-500 text-blue-700 px-2.5 py-0.5 rounded';
-badge.textContent = skill;
-```
-
-**Gradient badges:**
-```javascript
-const badge = document.createElement('span');
-badge.className = 'bg-gradient-to-r from-blue-500 to-purple-600 text-white px-2.5 py-0.5 rounded';
-badge.textContent = skill;
-```
-
----
-
-## Key Takeaways
-
-### Design Principles
-1. **Consistent Spacing:** Use 8px base unit (0.5rem, 1rem, 2rem)
-2. **Visual Hierarchy:** Size, weight, and color create importance
-3. **White Space:** Generous padding makes content breathable
-4. **Shadow System:** Subtle shadows create depth without distraction
-5. **Color Contrast:** WCAG AA compliant text-background combinations
-
-### Technical Patterns
-1. **Separation of Concerns:** HTML (structure), CSS (style), JS (behavior)
-2. **Progressive Enhancement:** Works without JS, enhanced with JS
-3. **Mobile-First:** Base styles for mobile, enhanced for desktop
-4. **Utility-First CSS:** Tailwind classes compose directly in HTML
-5. **Dynamic Rendering:** JavaScript maps data to DOM elements
-6. **Security-First:** Use textContent and DOM methods instead of innerHTML
-
-### Performance Considerations
-1. **CDN Loading:** Tailwind CSS loaded from CDN (no build step)
-2. **Minimal CSS:** Only custom animations/responsive tweaks
-3. **Inline SVG:** No external icon font files
-4. **DOMContentLoaded:** Scripts run after DOM parsing completes
-
----
-
-## File Structure
+How each agent processes within the workflow.
 
 ```
-project/
-├── index.html       # Main HTML structure
-├── script.js        # Dynamic content injection
-├── styles.css       # Custom CSS (animations, responsive)
-└── README.md        # Project documentation
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         AGENT EXECUTION PATTERN                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  LangGraph calls agent                                                        │
+│        │                                                                      │
+│        ▼                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  AGENT WRAPPER (e.g., tdd_agent)                                        │ │
+│  │  Location: app/components/{name}/agent.py                               │ │
+│  │                                                                          │ │
+│  │  async def tdd_agent(state: Dict[str, Any]) -> Dict[str, Any]:         │ │
+│  │      │                                                                   │ │
+│  │      ├─► 1. Extract data from state                                     │ │
+│  │      │      session_id = state["session_id"]                            │ │
+│  │      │      requirement = state["requirement_text"]                      │ │
+│  │      │      loaded_projects = state["loaded_projects"]                   │ │
+│  │      │                                                                   │ │
+│  │      ├─► 2. Create service request                                      │ │
+│  │      │      request = TDDRequest(                                        │ │
+│  │      │          session_id=session_id,                                   │ │
+│  │      │          requirement_text=requirement,                            │ │
+│  │      │          loaded_projects=loaded_projects,                         │ │
+│  │      │      )                                                            │ │
+│  │      │                                                                   │ │
+│  │      ├─► 3. Call service                                                │ │
+│  │      │      service = get_tdd_service()                                 │ │
+│  │      │      response = await service.process(request)                    │ │
+│  │      │                    │                                              │ │
+│  │      │                    ▼                                              │ │
+│  │      │              ┌─────────────────────────────────┐                 │ │
+│  │      │              │  SERVICE (TDDService)           │                 │ │
+│  │      │              │  ─────────────────────          │                 │ │
+│  │      │              │  • Assemble LLM context         │                 │ │
+│  │      │              │  • Call Ollama generate         │                 │ │
+│  │      │              │  • Parse JSON response          │                 │ │
+│  │      │              │  • Save to audit trail          │                 │ │
+│  │      │              │  • Return TDDResponse           │                 │ │
+│  │      │              └─────────────────────────────────┘                 │ │
+│  │      │                                                                   │ │
+│  │      └─► 4. Return PARTIAL state update                                 │ │
+│  │           return {                                                       │ │
+│  │               "tdd_output": response.model_dump(),                       │ │
+│  │               "status": "tdd_generated",                                 │ │
+│  │               "current_agent": "jira_stories",                           │ │
+│  │               "messages": [{"role": "tdd", "content": "..."}],          │ │
+│  │           }                                                              │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│        │                                                                      │
+│        ▼                                                                      │
+│  LangGraph MERGES partial update into full state                             │
+│        │                                                                      │
+│        ▼                                                                      │
+│  Next agent called with updated state                                         │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Quick Start Checklist
+## Hybrid Search Flow
 
-- [ ] Set up HTML with Tailwind CDN
-- [ ] Create container with `container mx-auto px-4`
-- [ ] Add header with circular image
-- [ ] Create card sections with `bg-white shadow-md rounded-lg p-8 mb-8`
-- [ ] Implement skills badges with `flex flex-wrap gap-4`
-- [ ] Add SVG social icons with hover effects
-- [ ] Write JavaScript to inject dynamic content using DOM methods
-- [ ] Add custom CSS for animations
-- [ ] Test responsive behavior at 640px breakpoint
-- [ ] Validate color contrast for accessibility
-- [ ] Review security: use textContent for user data
+How the hybrid search combines semantic and keyword matching.
 
----
-
-## Advanced Enhancements
-
-### Animation on Scroll
-```javascript
-const observerOptions = {
-    threshold: 0.1
-};
-
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('fade-in');
-        }
-    });
-}, observerOptions);
-
-document.querySelectorAll('section').forEach(section => {
-    observer.observe(section);
-});
 ```
-
-```css
-section {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.6s ease, transform 0.6s ease;
-}
-
-section.fade-in {
-    opacity: 1;
-    transform: translateY(0);
-}
-```
-
-### Dark Mode Support
-```javascript
-// Add to script.js
-const toggleDarkMode = () => {
-    document.body.classList.toggle('dark');
-};
-```
-
-```html
-<!-- Update classes for dark mode -->
-<body class="bg-gray-100 dark:bg-gray-900">
-    <section class="bg-white dark:bg-gray-800 shadow-md rounded-lg p-8">
-        <h2 class="text-gray-800 dark:text-gray-100">Title</h2>
-    </section>
-</body>
-```
-
-### Load Content from JSON
-```javascript
-fetch('content.json')
-    .then(response => response.json())
-    .then(data => {
-        // Secure: using textContent
-        document.getElementById('name').textContent = data.name;
-        document.getElementById('tagline').textContent = data.tagline;
-        document.getElementById('about-text').textContent = data.about;
-    })
-    .catch(error => {
-        console.error('Error loading content:', error);
-    });
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          HYBRID SEARCH FLOW                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Input: "Build user authentication system with OAuth 2.0"                     │
+│                                                                               │
+│         ┌───────────────────────────────────────────────────────────────┐    │
+│         │                                                                │    │
+│    ┌────┴────┐                                            ┌────────────┐│    │
+│    │  Query  │                                            │  ChromaDB  ││    │
+│    └────┬────┘                                            │ project_   ││    │
+│         │                                                 │ index      ││    │
+│         │                                                 └────────────┘│    │
+│         │                                                               │    │
+│    ┌────┴─────────────────────────────────────────────────────────┐    │    │
+│    │                      PARALLEL SEARCH                          │    │    │
+│    │                                                                │    │    │
+│    │  ┌─────────────────────────┐   ┌─────────────────────────┐   │    │    │
+│    │  │   SEMANTIC SEARCH       │   │   KEYWORD SEARCH        │   │    │    │
+│    │  │   ─────────────────     │   │   ──────────────        │   │    │    │
+│    │  │                         │   │                          │   │    │    │
+│    │  │   1. Embed query        │   │   1. Extract keywords    │   │    │    │
+│    │  │      via Ollama         │   │      authentication,     │   │    │    │
+│    │  │      all-minilm         │   │      OAuth, user,        │   │    │    │
+│    │  │      (384 dimensions)   │   │      system              │   │    │    │
+│    │  │                         │   │                          │   │    │    │
+│    │  │   2. Vector similarity  │   │   2. BM25 / text match   │   │    │    │
+│    │  │      search in ChromaDB │   │      against metadata    │   │    │    │
+│    │  │                         │   │                          │   │    │    │
+│    │  │   3. Results:           │   │   3. Results:            │   │    │    │
+│    │  │      PRJ-001: 0.89      │   │      PRJ-003: 0.95       │   │    │    │
+│    │  │      PRJ-002: 0.82      │   │      PRJ-001: 0.75       │   │    │    │
+│    │  │      PRJ-003: 0.78      │   │      PRJ-004: 0.60       │   │    │    │
+│    │  │                         │   │                          │   │    │    │
+│    │  └────────────┬────────────┘   └────────────┬─────────────┘   │    │    │
+│    │               │                              │                  │    │    │
+│    └───────────────┼──────────────────────────────┼──────────────────┘    │    │
+│                    │                              │                       │    │
+│                    ▼                              ▼                       │    │
+│              ┌─────────────────────────────────────────────────┐         │    │
+│              │               SCORE FUSION                       │         │    │
+│              │               ────────────                       │         │    │
+│              │                                                  │         │    │
+│              │   Final = (0.70 × Semantic) + (0.30 × Keyword)  │         │    │
+│              │                                                  │         │    │
+│              │   PRJ-001: (0.70 × 0.89) + (0.30 × 0.75) = 0.85 │         │    │
+│              │   PRJ-003: (0.70 × 0.78) + (0.30 × 0.95) = 0.83 │         │    │
+│              │   PRJ-002: (0.70 × 0.82) + (0.30 × 0.00) = 0.57 │         │    │
+│              │                                                  │         │    │
+│              │   Ranked: PRJ-001, PRJ-003, PRJ-002              │         │    │
+│              │                                                  │         │    │
+│              └─────────────────────────────────────────────────┘         │    │
+│                                                                          │    │
+│         Output: all_matches[] with score_breakdown per match             │    │
+│         {                                                                │    │
+│           "project_id": "PRJ-001",                                       │    │
+│           "match_score": 0.85,                                           │    │
+│           "score_breakdown": {                                           │    │
+│             "semantic_score": 0.89,                                      │    │
+│             "keyword_score": 0.75                                        │    │
+│           }                                                              │    │
+│         }                                                                │    │
+│                                                                          │    │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Complete Code Example
+## Context Assembly Flow
 
-### index.html
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portfolio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal">
-    <div class="container mx-auto px-4">
-        <header class="text-center py-16">
-            <img id="profile-image" src="https://via.placeholder.com/150" alt="Profile"
-                 class="mx-auto rounded-full w-48 h-48 object-cover mb-6 shadow-lg">
-            <h1 id="name" class="text-4xl font-bold text-gray-800 mb-4">Name</h1>
-            <p id="tagline" class="text-xl text-gray-600">Tagline</p>
-        </header>
+How full documents are loaded and assembled for agents.
 
-        <section class="bg-white shadow-md rounded-lg p-8 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">About</h2>
-            <p id="about-text" class="text-gray-700">About text...</p>
-        </section>
-
-        <section class="bg-white shadow-md rounded-lg p-8 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Skills</h2>
-            <div id="skills-list" class="flex flex-wrap gap-4"></div>
-        </section>
-
-        <section id="contact" class="bg-white shadow-md rounded-lg p-8">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Contact</h2>
-            <div class="flex justify-center space-x-6">
-                <a href="#" target="_blank" rel="noopener noreferrer">
-                    <!-- Social icons here -->
-                </a>
-            </div>
-        </section>
-    </div>
-    <script src="script.js"></script>
-</body>
-</html>
 ```
-
-### script.js (Secure Implementation)
-```javascript
-document.addEventListener('DOMContentLoaded', () => {
-    // Update profile information
-    document.getElementById('name').textContent = 'Your Name';
-    document.getElementById('tagline').textContent = 'Your Title';
-    document.getElementById('about-text').textContent = 'Your biography...';
-
-    // Generate skills badges securely
-    const skills = ['HTML', 'CSS', 'JavaScript', 'React', 'Node.js'];
-    const skillsList = document.getElementById('skills-list');
-
-    skills.forEach(skill => {
-        const badge = document.createElement('span');
-        badge.className = 'bg-blue-100 text-blue-800 text-sm font-medium mr-2 px-2.5 py-0.5 rounded';
-        badge.textContent = skill;
-        skillsList.appendChild(badge);
-    });
-});
-```
-
-### styles.css
-```css
-body {
-    scroll-behavior: smooth;
-}
-
-#contact a svg {
-    transition: transform 0.3s ease;
-}
-
-#contact a:hover svg {
-    transform: scale(1.2);
-}
-
-@media (max-width: 640px) {
-    header {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-
-    #name {
-        font-size: 2.5rem;
-    }
-}
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        CONTEXT ASSEMBLY FLOW                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  After auto_select: selected_matches = [PRJ-001, PRJ-002, PRJ-003]           │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                     ContextAssembler.load_full_documents()               │ │
+│  │                                                                          │ │
+│  │  For each project in selected_matches:                                   │ │
+│  │                                                                          │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  PRJ-001                                                           │ │ │
+│  │  │  ─────────                                                         │ │ │
+│  │  │                                                                     │ │ │
+│  │  │  data/projects/PRJ-001/                                            │ │ │
+│  │  │  ├── tdd.docx ──────────► TDDParser.parse() ──────► TDDDocument   │ │ │
+│  │  │  │                                                                 │ │ │
+│  │  │  ├── estimation.xlsx ──► EstimationParser.parse() ► EstimationDoc │ │ │
+│  │  │  │                                                                 │ │ │
+│  │  │  └── jira_stories.docx ─► JiraStoriesParser.parse() ► JiraStories │ │ │
+│  │  │                                                                     │ │ │
+│  │  └────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                          │ │
+│  │  Result: loaded_projects = {                                            │ │
+│  │    "PRJ-001": {                                                          │ │
+│  │      "tdd": TDDDocument(...),                                           │ │
+│  │      "estimation": EstimationDocument(...),                             │ │
+│  │      "jira_stories": JiraStoriesDocument(...)                           │ │
+│  │    },                                                                    │ │
+│  │    "PRJ-002": {...},                                                    │ │
+│  │    "PRJ-003": {...}                                                     │ │
+│  │  }                                                                       │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│                                      │                                        │
+│                                      ▼                                        │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                 Agent-Specific Context Assembly                          │ │
+│  │                                                                          │ │
+│  │  Each agent receives DIFFERENT subsets of the loaded documents:          │ │
+│  │                                                                          │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  impacted_modules agent receives:                                │   │ │
+│  │  │  • module_list, interaction_flow, design_decisions, risks        │   │ │
+│  │  │  Source: TDD documents                                           │   │ │
+│  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  estimation_effort agent receives:                               │   │ │
+│  │  │  • task_breakdown, total_points, assumptions_and_risks           │   │ │
+│  │  │  Source: Estimation + TDD module_list                            │   │ │
+│  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  tdd agent receives:                                             │   │ │
+│  │  │  • design_overview, design_patterns, module_designs, full_text   │   │ │
+│  │  │  Source: Full TDD documents                                      │   │ │
+│  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │  │  jira_stories agent receives:                                    │   │ │
+│  │  │  • existing_stories, task_breakdown, total_points                │   │ │
+│  │  │  Source: Jira Stories + Estimation                               │   │ │
+│  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Resources
+## State Progression Flow
 
-**Tailwind CSS Documentation:** https://tailwindcss.com/docs
-**SVG Icons:** https://heroicons.com
-**Color Palette Tool:** https://tailwindcss.com/docs/customizing-colors
-**Responsive Design:** https://tailwindcss.com/docs/responsive-design
-**DOMPurify (HTML Sanitization):** https://github.com/cure53/DOMPurify
+How the workflow state evolves through pipeline execution.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        STATE PROGRESSION FLOW                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Initial State                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ {                                                                        │ │
+│  │   session_id: "sess-123",                                               │ │
+│  │   requirement_text: "Build OAuth system...",                            │ │
+│  │   status: "created",                                                    │ │
+│  │   messages: []                                                          │ │
+│  │ }                                                                        │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌───────────────────┐                                                       │
+│  │ requirement_agent │ ──► status: "requirement_submitted"                   │
+│  └───────────────────┘     + extracted_keywords: ["OAuth", "authentication"]│
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌────────────────────────┐                                                  │
+│  │ historical_match_agent │ ──► status: "matches_found"                      │
+│  └────────────────────────┘     + all_matches: [{...}, {...}, {...}]        │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌──────────────────┐                                                        │
+│  │ auto_select_node │ ──► status: "matches_selected"                         │
+│  └──────────────────┘     + selected_matches: [{...}, {...}, {...}]         │
+│         │                 + loaded_projects: {PRJ-001: {...}, ...}          │
+│         ▼                                                                     │
+│  ┌─────────────────────────┐                                                 │
+│  │ impacted_modules_agent  │ ──► status: "impacted_modules_generated"        │
+│  └─────────────────────────┘     + impacted_modules_output: {...}           │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌─────────────────────────┐                                                 │
+│  │ estimation_effort_agent │ ──► status: "estimation_effort_completed"       │
+│  └─────────────────────────┘     + estimation_effort_output: {...}          │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌────────────┐                                                              │
+│  │ tdd_agent  │ ──► status: "tdd_generated"                                  │
+│  └────────────┘     + tdd_output: {...}                                     │
+│         │                                                                     │
+│         ▼                                                                     │
+│  ┌───────────────────┐                                                       │
+│  │ jira_stories_agent│ ──► status: "jira_stories_generated" → "completed"   │
+│  └───────────────────┘     + jira_stories_output: {...}                     │
+│         │                                                                     │
+│         ▼                                                                     │
+│  Final State                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │ {                                                                        │ │
+│  │   session_id: "sess-123",                                               │ │
+│  │   requirement_text: "...",                                              │ │
+│  │   extracted_keywords: [...],                                            │ │
+│  │   all_matches: [...],                                                   │ │
+│  │   selected_matches: [...],                                              │ │
+│  │   loaded_projects: {...},                                               │ │
+│  │   impacted_modules_output: {...},                                       │ │
+│  │   estimation_effort_output: {...},                                      │ │
+│  │   tdd_output: {...},                                                    │ │
+│  │   jira_stories_output: {...},                                           │ │
+│  │   status: "completed",                                                  │ │
+│  │   messages: [{role: "requirement", ...}, {role: "search", ...}, ...]   │ │
+│  │ }                                                                        │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-**Last Updated:** 2026-01-20
+## SSE Streaming Flow
+
+How Server-Sent Events deliver real-time progress to the frontend.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          SSE STREAMING FLOW                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  FRONTEND                                 BACKEND                             │
+│  ─────────                                ───────                             │
+│                                                                               │
+│  ┌─────────────┐   POST /impact/         ┌─────────────────────────────────┐│
+│  │             │   run-pipeline/stream    │                                 ││
+│  │ EventSource │ ─────────────────────►  │  StreamingResponse              ││
+│  │             │                          │  (async generator)              ││
+│  └─────────────┘                          └─────────────────────────────────┘│
+│        │                                            │                         │
+│        │                                            │                         │
+│        │    event: pipeline_start                   │                         │
+│        │    data: {"session_id":"sess-123",         │                         │
+│        │           "total_agents":7}                │  ┌─────────────────┐   │
+│        │◄────────────────────────────────────────────  │ yield event     │   │
+│        │                                            │  └────────┬────────┘   │
+│        │                                            │           │            │
+│  [Show progress: 0%]                                │           ▼            │
+│        │                                            │  requirement_agent()   │
+│        │                                            │           │            │
+│        │    event: agent_complete                   │           │            │
+│        │    data: {"agent_name":"requirement",      │  ┌────────┴────────┐   │
+│        │           "agent_index":1,                 │  │ yield event     │   │
+│        │           "progress_percent":12.5}         │  └─────────────────┘   │
+│        │◄────────────────────────────────────────────                        │
+│        │                                            │                         │
+│  [Show progress: 12.5%]                             │           ▼            │
+│        │                                            │  historical_match()    │
+│        │                                            │           │            │
+│        │    event: agent_complete                   │  ┌────────┴────────┐   │
+│        │    data: {"agent_name":"historical_match", │  │ yield event     │   │
+│        │           "progress_percent":25}           │  └─────────────────┘   │
+│        │◄────────────────────────────────────────────                        │
+│        │                                            │                         │
+│  [Show progress: 25%]                               │                         │
+│        │                                            │                         │
+│        │         ... (continue for each agent) ...  │                         │
+│        │                                            │                         │
+│        │    event: pipeline_complete                │                         │
+│        │    data: {"session_id":"sess-123",         │                         │
+│        │           "status":"completed",            │  ┌─────────────────┐   │
+│        │           "output":{...}}                  │  │ yield final     │   │
+│        │◄────────────────────────────────────────────  └─────────────────┘   │
+│        │                                            │                         │
+│  [Show results]                                     │                         │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Error Handling Flow
+
+How errors propagate and are handled in the workflow.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        ERROR HANDLING FLOW                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Normal Flow                     Error Flow                                   │
+│  ───────────                     ──────────                                   │
+│                                                                               │
+│  ┌──────────────┐               ┌──────────────┐                            │
+│  │ Some Agent   │               │ Some Agent   │                            │
+│  │              │               │              │                            │
+│  │ try:        │               │ try:        │                            │
+│  │   result =  │               │   result =  │                            │
+│  │   process() │               │   process() │ ──► Exception raised!       │
+│  │ except:     │               │ except:     │                            │
+│  │   ...       │               │   return {  │                            │
+│  └──────┬───────┘               │     "status": "error",                   │
+│         │                       │     "error_message": str(e),             │
+│         ▼                       │     "current_agent": "error_handler"     │
+│  Return success                 │   }         │                            │
+│  state update                   └──────┬───────┘                            │
+│         │                              │                                     │
+│         ▼                              ▼                                     │
+│  Continue to                   ┌──────────────────────┐                     │
+│  next agent                    │ Conditional Edge     │                     │
+│                                │ route_after_agent()  │                     │
+│                                │                      │                     │
+│                                │ if status == "error":│                     │
+│                                │   return "error_     │                     │
+│                                │          handler"    │                     │
+│                                └──────────┬───────────┘                     │
+│                                           │                                  │
+│                                           ▼                                  │
+│                                ┌──────────────────────┐                     │
+│                                │  error_handler_node  │                     │
+│                                │                      │                     │
+│                                │  return {            │                     │
+│                                │    "status": "error",│                     │
+│                                │    "messages": [...] │                     │
+│                                │  }                   │                     │
+│                                └──────────┬───────────┘                     │
+│                                           │                                  │
+│                                           ▼                                  │
+│                                          END                                 │
+│                                                                               │
+│  ─────────────────────────────────────────────────────────────────────────   │
+│                                                                               │
+│  Exception Hierarchy:                                                         │
+│                                                                               │
+│  ComponentError (base)                                                        │
+│  ├── SessionNotFoundError                                                    │
+│  ├── InvalidSessionStateError                                                │
+│  ├── RequirementTooShortError                                                │
+│  ├── NoMatchesFoundError                                                     │
+│  ├── AgentExecutionError                                                     │
+│  ├── ResponseParsingError        ◄── Most common (LLM returns bad JSON)     │
+│  ├── OllamaUnavailableError                                                  │
+│  ├── OllamaTimeoutError                                                      │
+│  └── VectorDBError                                                           │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Data Storage Flow
+
+How data flows to persistent storage during pipeline execution.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         DATA STORAGE FLOW                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                       RUNTIME DATA FLOW                                  │ │
+│  │                                                                          │ │
+│  │   Agent Processing                                                       │ │
+│  │        │                                                                 │ │
+│  │        ▼                                                                 │ │
+│  │   ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │   │  AuditTrailManager(session_id)                                   │   │ │
+│  │   │                                                                   │   │ │
+│  │   │  audit.save_json("requirement.json", data, subfolder="step1")   │   │ │
+│  │   │  audit.save_text("prompt.txt", prompt, subfolder="agent_tdd")   │   │ │
+│  │   │  audit.record_timing("tdd_generation", 12500)                   │   │ │
+│  │   │  audit.add_step_completed("tdd_generated")                       │   │ │
+│  │   └─────────────────────────────────────────────────────────────────┘   │ │
+│  │        │                                                                 │ │
+│  │        ▼                                                                 │ │
+│  │   File System                                                            │ │
+│  │   ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │   │  sessions/{date}/{session_id}/                                   │   │ │
+│  │   │  ├── session_metadata.json      ◄── Session info, timing        │   │ │
+│  │   │  ├── step1_input/                                                │   │ │
+│  │   │  │   ├── requirement.json       ◄── Original requirement        │   │ │
+│  │   │  │   └── extracted_keywords.json                                 │   │ │
+│  │   │  ├── step2_historical_match/                                     │   │ │
+│  │   │  │   ├── search_request.json    ◄── Search parameters           │   │ │
+│  │   │  │   ├── all_matches.json       ◄── Full search results         │   │ │
+│  │   │  │   └── selected_matches.json  ◄── Selected top 3              │   │ │
+│  │   │  ├── step3_agents/                                               │   │ │
+│  │   │  │   ├── agent_impacted_modules/                                 │   │ │
+│  │   │  │   │   ├── input_prompt.txt   ◄── LLM prompt                  │   │ │
+│  │   │  │   │   ├── raw_response.txt   ◄── Raw LLM output              │   │ │
+│  │   │  │   │   ├── llm_request.json   ◄── Request metadata            │   │ │
+│  │   │  │   │   └── parsed_output.json ◄── Structured output           │   │ │
+│  │   │  │   ├── agent_estimation/                                       │   │ │
+│  │   │  │   │   └── ...                                                 │   │ │
+│  │   │  │   ├── agent_tdd/                                              │   │ │
+│  │   │  │   │   ├── input_prompt.txt                                    │   │ │
+│  │   │  │   │   ├── raw_response.txt                                    │   │ │
+│  │   │  │   │   ├── tdd.md             ◄── Generated TDD markdown      │   │ │
+│  │   │  │   │   └── parsed_output.json                                  │   │ │
+│  │   │  │   └── agent_jira_stories/                                     │   │ │
+│  │   │  │       └── ...                                                 │   │ │
+│  │   │  └── final_summary.json         ◄── Complete assessment         │   │ │
+│  │   └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                      VECTOR DATABASE STORAGE                             │ │
+│  │                                                                          │ │
+│  │   ChromaDB (data/chroma/)                                                │ │
+│  │   ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │   │  Collections:                                                    │   │ │
+│  │   │                                                                   │   │ │
+│  │   │  ┌───────────────────────────────────────────────────────────┐  │   │ │
+│  │   │  │  project_index (PRIMARY - used for search)                 │  │   │ │
+│  │   │  │  ────────────────────────────────────────                  │  │   │ │
+│  │   │  │  • Lightweight metadata per project                        │  │   │ │
+│  │   │  │  • Fields: project_id, project_name, summary, folder_path │  │   │ │
+│  │   │  │  • Fast search, no full documents                          │  │   │ │
+│  │   │  └───────────────────────────────────────────────────────────┘  │   │ │
+│  │   │                                                                   │   │ │
+│  │   │  ┌───────────────────────────────────────────────────────────┐  │   │ │
+│  │   │  │  epics, estimations, tdds, stories (LEGACY)               │  │   │ │
+│  │   │  │  ─────────────────────────────────────────                 │  │   │ │
+│  │   │  │  • Full document data from CSV files                       │  │   │ │
+│  │   │  │  • Used for backward compatibility                         │  │   │ │
+│  │   │  └───────────────────────────────────────────────────────────┘  │   │ │
+│  │   │                                                                   │   │ │
+│  │   └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Reference: Status Values
+
+| Status | Description | Set By |
+|--------|-------------|--------|
+| `created` | Session initialized | Session service |
+| `requirement_submitted` | Requirement parsed | requirement_agent |
+| `matches_found` | Search completed | historical_match_agent |
+| `matches_selected` | Top matches selected, docs loaded | auto_select_node |
+| `impacted_modules_generated` | Modules identified | impacted_modules_agent |
+| `estimation_effort_completed` | Effort estimated | estimation_effort_agent |
+| `tdd_generated` | TDD created | tdd_agent |
+| `jira_stories_generated` | Stories created | jira_stories_agent |
+| `completed` | Pipeline finished | jira_stories_agent |
+| `error` | Error occurred | Any agent or error_handler |
+
+---
+
+## Quick Reference: Active Agents
+
+| Order | Agent | Input | Output |
+|-------|-------|-------|--------|
+| 1 | requirement_agent | requirement_text | extracted_keywords |
+| 2 | historical_match_agent | requirement_text | all_matches |
+| 3 | auto_select_node | all_matches | selected_matches, loaded_projects |
+| 4 | impacted_modules_agent | loaded_projects | impacted_modules_output |
+| 5 | estimation_effort_agent | loaded_projects | estimation_effort_output |
+| 6 | tdd_agent | loaded_projects | tdd_output |
+| 7 | jira_stories_agent | loaded_projects | jira_stories_output |
+
+---
+
+*Document Version: 2.0*
+*Last Updated: January 2026*

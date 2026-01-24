@@ -19,7 +19,12 @@ class ImpactAssessmentState(TypedDict, total=False):
     all_matches: List[Dict]
     selected_matches: List[Dict]
 
+    # LOADED DOCUMENTS - Set by auto_select node after user selects matches
+    loaded_projects: Optional[Dict[str, Dict]]  # {project_id: {tdd: {...}, estimation: {...}, jira_stories: {...}}}
+
     # AGENT OUTPUTS - Set by each agent component
+    # impacted_modules_output contains: {functional_modules: [...], technical_modules: [...]}
+    # Used by estimation_effort agent to filter modules from historical TDDs
     impacted_modules_output: Dict
     estimation_effort_output: Dict
     tdd_output: Dict

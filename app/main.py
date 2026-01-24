@@ -15,6 +15,8 @@ from app.components.code_impact.router import router as code_router
 from app.components.risks.router import router as risks_router
 from app.components.orchestrator.router import router as orchestrator_router
 from app.components.file_input.router import router as file_input_router
+from app.components.project_search.router import router as project_search_router
+from app.components.admin.router import router as admin_router
 
 
 @asynccontextmanager
@@ -75,6 +77,10 @@ app.include_router(code_router, prefix="/api/v1")
 app.include_router(risks_router, prefix="/api/v1")
 app.include_router(orchestrator_router, prefix="/api/v1")
 app.include_router(file_input_router, prefix="/api/v1")
+
+# New routers for on-demand document retrieval
+app.include_router(project_search_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

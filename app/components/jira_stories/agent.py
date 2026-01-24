@@ -24,6 +24,7 @@ async def jira_stories_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             impacted_modules_output=state.get("impacted_modules_output", {}),
             estimation_effort_output=state.get("estimation_effort_output", {}),
             tdd_output=state.get("tdd_output", {}),
+            loaded_projects=state.get("loaded_projects", {}),
         )
 
         response = await service.process(request)

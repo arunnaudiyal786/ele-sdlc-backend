@@ -21,6 +21,7 @@ async def impacted_modules_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             session_id=state["session_id"],
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
+            loaded_projects=state.get("loaded_projects", {}),
         )
 
         response = await service.process(request)

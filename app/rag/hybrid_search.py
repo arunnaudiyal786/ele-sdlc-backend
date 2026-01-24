@@ -1,11 +1,33 @@
 import re
 from typing import List, Dict, Optional, Set
 from collections import Counter
+from pydantic import BaseModel, Field
 from app.components.base.config import get_settings
 from .vector_store import ChromaVectorStore
 from .embeddings import OllamaEmbeddingService
 
 _instance: Optional["HybridSearchService"] = None
+
+
+# ===== Models for Project Search =====
+
+class ScoreBreakdown(BaseModel):
+    """Score breakdown for hybrid search"""
+    semantic_score: float = Field(..., description="Semantic similarity score (0-1)")
+    keyword_score: float = Field(..., description="Keyword overlap score (0-1)")
+
+
+class ProjectMatch(BaseModel):
+    """Project match from search results"""
+    project_id: str = Field(..., description="Project ID")
+    project_name: str = Field(..., description="Project name")
+    summary: str = Field(..., description="Epic description summary")
+    match_score: float = Field(..., description="Final hybrid score")
+    score_breakdown: ScoreBreakdown = Field(..., description="Score components")
+    folder_path: str = Field(..., description="Path to project folder")
+    tdd_path: str = Field(..., description="Path to TDD file")
+    estimation_path: str = Field(..., description="Path to estimation file")
+    jira_stories_path: str = Field(..., description="Path to jira stories file")
 
 
 class HybridSearchService:
@@ -114,6 +136,91 @@ class HybridSearchService:
                     break
 
         return unique_results
+
+    async def search_projects(
+        self,
+        query: str,
+        top_k: int = 5,
+        semantic_weight: Optional[float] = None,
+        keyword_weight: Optional[float] = None,
+    ) -> List[ProjectMatch]:
+        """
+        Search project_index collection for similar projects
+
+        Uses hybrid search (semantic + keyword) on lightweight project metadata.
+        Returns ProjectMatch objects with full metadata for document loading.
+
+        Args:
+            query: User requirement text to search
+            top_k: Number of top matches to return (default: 5)
+            semantic_weight: Override semantic weight (default: 0.7)
+            keyword_weight: Override keyword weight (default: 0.3)
+
+        Returns:
+            List of ProjectMatch objects sorted by match_score
+
+        Example:
+            matches = await search.search_projects(
+                query="Real-time inventory tracking system",
+                top_k=5
+            )
+        """
+        sw = semantic_weight if semantic_weight is not None else self.semantic_weight
+        kw = keyword_weight if keyword_weight is not None else self.keyword_weight
+
+        # Get query embedding
+        query_embedding = await self.embedding_service.embed(query)
+        query_keywords = self.extract_keywords(query)
+
+        # Search project_index collection
+        try:
+            semantic_results = await self.vector_store.search(
+                collection_name="project_index",
+                query_embedding=query_embedding,
+                top_k=top_k * 2,  # Over-fetch for keyword fusion
+            )
+        except Exception as e:
+            # Return empty if collection doesn't exist or search fails
+            return []
+
+        # Calculate hybrid scores
+        results = []
+        for result in semantic_results:
+            # Get document text (project_name + summary)
+            doc_text = result.get("text", "")
+
+            # Calculate keyword score
+            keyword_score = self.calculate_keyword_score(query_keywords, doc_text)
+
+            # Get semantic score (cosine similarity)
+            semantic_score = result.get("score", 0)
+
+            # Fuse scores
+            final_score = (sw * semantic_score) + (kw * keyword_score)
+
+            # Extract metadata
+            metadata = result.get("metadata", {})
+
+            # Create ProjectMatch object
+            project_match = ProjectMatch(
+                project_id=metadata.get("project_id", result.get("id", "")),
+                project_name=metadata.get("project_name", ""),
+                summary=metadata.get("summary", ""),
+                match_score=round(final_score, 4),
+                score_breakdown=ScoreBreakdown(
+                    semantic_score=round(semantic_score, 4),
+                    keyword_score=round(keyword_score, 4),
+                ),
+                folder_path=metadata.get("folder_path", ""),
+                tdd_path=metadata.get("tdd_path", ""),
+                estimation_path=metadata.get("estimation_path", ""),
+                jira_stories_path=metadata.get("jira_stories_path", ""),
+            )
+            results.append(project_match)
+
+        # Sort by final score and return top_k
+        results.sort(key=lambda x: x.match_score, reverse=True)
+        return results[:top_k]
 
     @classmethod
     def get_instance(cls) -> "HybridSearchService":

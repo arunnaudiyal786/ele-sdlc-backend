@@ -23,6 +23,7 @@ async def tdd_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             selected_matches=state.get("selected_matches", []),
             impacted_modules_output=state.get("impacted_modules_output", {}),
             estimation_effort_output=state.get("estimation_effort_output", {}),
+            loaded_projects=state.get("loaded_projects", {}),
         )
 
         response = await service.process(request)

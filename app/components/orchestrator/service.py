@@ -9,6 +9,8 @@ from .workflow import create_impact_workflow
 
 
 # Agent execution order for progress tracking
+# NOTE: Only include agents that are actually enabled in the workflow
+# Disabled agents (code_impact, risks) should NOT be in this list
 AGENT_ORDER = [
     "requirement",
     "historical_match",
@@ -17,8 +19,6 @@ AGENT_ORDER = [
     "estimation_effort",
     "tdd",
     "jira_stories",
-    "code_impact",
-    "risks",
 ]
 
 
@@ -250,12 +250,14 @@ class OrchestratorService(BaseComponent[PipelineRequest, PipelineResponse]):
             requirement_data = audit.load_json("step1_input/requirement.json")
 
             # Emit pipeline_complete event with final outputs
+            # IMPORTANT: Always send status="completed" for pipeline_complete event
+            # The frontend wizard depends on this to transition to results page
             yield self._format_sse_event(StreamEvent(
                 type="pipeline_complete",
                 session_id=request.session_id,
                 timestamp=datetime.now().isoformat(),
                 data=StreamEventData(
-                    status=final_state.get("status", "completed"),
+                    status="completed",
                     progress_percent=100,
                     output={
                         "historical_matches": all_matches if all_matches else [],

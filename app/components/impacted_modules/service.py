@@ -21,8 +21,13 @@ class ImpactedModulesService(BaseComponent[ImpactedModulesRequest, ImpactedModul
         return "impacted_modules"
 
     async def process(self, request: ImpactedModulesRequest) -> ImpactedModulesResponse:
-        """Identify impacted modules using LLM."""
-        formatted_matches = self._format_matches(request.selected_matches)
+        """Identify impacted modules using LLM with full document context."""
+        # Use loaded_projects if available, otherwise fall back to selected_matches
+        if request.loaded_projects:
+            formatted_matches = self._format_loaded_projects(request.loaded_projects)
+        else:
+            formatted_matches = self._format_matches(request.selected_matches)
+
         user_prompt = IMPACTED_MODULES_USER_PROMPT.format(
             requirement_description=request.requirement_text,
             formatted_historical_matches=formatted_matches,
@@ -59,8 +64,38 @@ class ImpactedModulesService(BaseComponent[ImpactedModulesRequest, ImpactedModul
 
         return response
 
+    def _format_loaded_projects(self, loaded_projects: Dict[str, Dict]) -> str:
+        """Format loaded project documents for impacted modules analysis.
+
+        Extracts module lists, interaction flows, and design decisions from TDD documents.
+        """
+        lines = []
+        for i, (project_id, docs) in enumerate(loaded_projects.items(), 1):
+            tdd = docs.get("tdd", {})
+            project_name = tdd.get("project_name", project_id)
+            epic_desc = tdd.get("epic_description", "")[:200]
+
+            lines.append(f"\n{i}. {project_name} ({project_id})")
+            lines.append(f"   Epic: {epic_desc}")
+
+            # Module list
+            module_list = tdd.get("module_list", [])
+            if module_list:
+                lines.append(f"   Modules ({len(module_list)}):")
+                for mod in module_list[:10]:  # Limit to first 10
+                    mod_name = mod.get("component_name", "Unknown")
+                    mod_desc = mod.get("description", "")
+                    lines.append(f"     - {mod_name}: {mod_desc}")
+
+            # Design decisions (if available)
+            design_decisions = tdd.get("design_decisions", "")
+            if design_decisions:
+                lines.append(f"   Design Decisions: {design_decisions[:300]}")
+
+        return "\n".join(lines) if lines else "No project documents available."
+
     def _format_matches(self, matches: List[Dict]) -> str:
-        """Format matches for prompt."""
+        """Format matches for prompt (legacy fallback)."""
         lines = []
         for i, m in enumerate(matches[:5], 1):
             lines.append(f"{i}. {m.get('epic_name', 'Unknown')}: {m.get('description', '')[:200]}")

@@ -10,6 +10,8 @@ Comprehensive guide to the AI Impact Assessment System's design, patterns, and t
   - [LangGraph State Management](#langgraph-state-management)
   - [Workflow Pipeline](#workflow-pipeline)
   - [RAG Layer](#rag-layer)
+  - [Context Assembly](#context-assembly)
+  - [SSE Streaming](#sse-streaming)
   - [Configuration Management](#configuration-management)
   - [Error Handling](#error-handling)
 - [Data Flow](#data-flow)
@@ -45,7 +47,7 @@ Comprehensive guide to the AI Impact Assessment System's design, patterns, and t
 │  │                    Orchestration Layer                          │  │
 │  │  LangGraph workflow • State management • Agent coordination    │  │
 │  │                                                                 │  │
-│  │  requirement → search → select → modules →                     │  │
+│  │  requirement → historical_match → auto_select → modules →      │  │
 │  │  estimation → tdd → jira_stories → END                         │  │
 │  └────────────┬───────────────────────────────────────────────────┘  │
 │               │                                                       │
@@ -203,31 +205,53 @@ from typing import TypedDict, List, Dict, Any, Annotated
 import operator
 
 
-class State(TypedDict):
-    """Workflow state - represents entire pipeline context."""
+class ImpactAssessmentState(TypedDict, total=False):
+    """Workflow state - represents entire pipeline context.
 
-    # Identity
+    Using total=False allows nodes to return PARTIAL updates.
+    LangGraph automatically merges partial returns into full state.
+    """
+
+    # SESSION CONTEXT - Set at workflow start
     session_id: str
-
-    # Input
     requirement_text: str
     jira_epic_id: str | None
-
-    # Intermediate data
     extracted_keywords: List[str]
+
+    # SEARCH RESULTS - Set by historical_match component
     all_matches: List[Dict[str, Any]]
     selected_matches: List[Dict[str, Any]]
 
-    # Agent outputs
+    # LOADED DOCUMENTS - Set by auto_select node
+    # Contains full TDD, estimation, jira_stories for each selected project
+    loaded_projects: Dict[str, Dict]  # {project_id: {tdd: {...}, estimation: {...}, jira_stories: {...}}}
+
+    # AGENT OUTPUTS - Set by each agent component
     impacted_modules_output: Dict[str, Any]
     estimation_effort_output: Dict[str, Any]
     tdd_output: Dict[str, Any]
     jira_stories_output: Dict[str, Any]
+    code_impact_output: Dict[str, Any]  # Currently disabled
+    risks_output: Dict[str, Any]        # Currently disabled
 
-    # Control flow
-    status: str
+    # CONTROL FIELDS - Updated throughout workflow
+    status: Literal[
+        "created",
+        "requirement_submitted",
+        "matches_found",
+        "matches_selected",
+        "impacted_modules_generated",
+        "estimation_effort_completed",
+        "tdd_generated",
+        "jira_stories_generated",
+        "completed",
+        "error",
+    ]
     current_agent: str
     error_message: str | None
+
+    # TIMING & AUDIT
+    timing: Dict[str, int]
 
     # Messages (append-only via reducer)
     messages: Annotated[List[Dict[str, Any]], operator.add]
@@ -289,34 +313,56 @@ return {
 
 ```python
 from langgraph.graph import StateGraph, END
-from .state import State
+from .state import ImpactAssessmentState
 
 # Create graph
-workflow = StateGraph(State)
+workflow = StateGraph(ImpactAssessmentState)
 
 # Add nodes (agents)
 workflow.add_node("requirement", requirement_agent)
-workflow.add_node("search", search_agent)
-workflow.add_node("auto_select", auto_select_agent)
+workflow.add_node("historical_match", historical_match_agent)
+workflow.add_node("auto_select", auto_select_node)  # Loads full documents
 workflow.add_node("impacted_modules", impacted_modules_agent)
 workflow.add_node("estimation_effort", estimation_effort_agent)
 workflow.add_node("tdd", tdd_agent)
 workflow.add_node("jira_stories", jira_stories_agent)
+workflow.add_node("error_handler", error_handler_node)
+# Temporarily disabled:
+# workflow.add_node("code_impact", code_impact_agent)
+# workflow.add_node("risks", risks_agent)
 
 # Set entry point
 workflow.set_entry_point("requirement")
 
-# Add edges (define flow)
-workflow.add_edge("requirement", "search")
-workflow.add_edge("search", "auto_select")
-workflow.add_edge("auto_select", "impacted_modules")
+# Wire edges
+workflow.add_edge("requirement", "historical_match")
+workflow.add_conditional_edges(
+    "historical_match",
+    route_after_historical_match,
+    {"auto_select": "auto_select", "error_handler": "error_handler"},
+)
+workflow.add_conditional_edges(
+    "auto_select",
+    route_after_auto_select,
+    {"impacted_modules": "impacted_modules", "error_handler": "error_handler", END: END},
+)
 workflow.add_edge("impacted_modules", "estimation_effort")
 workflow.add_edge("estimation_effort", "tdd")
+workflow.add_edge("tdd", "jira_stories")
 workflow.add_edge("jira_stories", END)
+workflow.add_edge("error_handler", END)
 
 # Compile
 compiled_workflow = workflow.compile()
 ```
+
+**Active Pipeline Flow:**
+```
+requirement → historical_match → auto_select → impacted_modules
+           → estimation_effort → tdd → jira_stories → END
+```
+
+**Note**: `code_impact` and `risks` agents are implemented but currently disabled in the workflow.
 
 #### Conditional Edges
 
@@ -395,14 +441,17 @@ async def safe_agent(state: Dict[str, Any]) -> Dict[str, Any]:
 │                         ▼                                │
 │  Tier 2: Vector Store (app/rag/vector_store.py)        │
 │  ┌────────────────────────────────────────────────────┐ │
-│  │  VectorStoreManager                                │ │
+│  │  ChromaVectorStore (singleton)                     │ │
 │  │  • ChromaDB client wrapper                         │ │
-│  │  • Collections: epics, estimations, tdds           │ │
+│  │  • Collections:                                    │ │
+│  │    - project_index (lightweight metadata)          │ │
+│  │    - epics, estimations, tdds, stories            │ │
 │  │  • Persistent storage (data/chroma/)               │ │
 │  │  • Methods:                                        │ │
 │  │    - get_or_create_collection()                   │ │
 │  │    - add_documents()                              │ │
-│  │    - query()                                      │ │
+│  │    - search()                                     │ │
+│  │    - delete_collection()                          │ │
 │  └────────────────────────────────────────────────────┘ │
 │                         │                                │
 │                         ▼                                │
@@ -481,6 +530,139 @@ def hybrid_search(query: str, top_k: int = 10):
 | Conceptual queries | 0.8 | 0.2 | Meaning matters more |
 | Technical terms | 0.5 | 0.5 | Exact matches important |
 | Known keywords | 0.3 | 0.7 | Prefer exact hits |
+
+---
+
+### Context Assembly
+
+The `ContextAssembler` service loads full documents for selected projects after the auto-select step.
+
+#### Project Metadata Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Two-Stage Document Loading                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  STAGE 1: Lightweight Search (project_index collection)             │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  Search: requirement_text → project_index                       │ │
+│  │  Returns: project_id, project_name, summary, folder_path        │ │
+│  │  Purpose: Fast matching without loading full documents          │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                           │                                          │
+│                           ▼                                          │
+│  STAGE 2: Full Document Loading (top 3 selected projects)           │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  ContextAssembler.load_full_documents()                         │ │
+│  │                                                                  │ │
+│  │  For each selected project:                                      │ │
+│  │  ├── TDDParser.parse(tdd_path) → TDDDocument                    │ │
+│  │  ├── EstimationParser.parse(estimation_path) → EstimationDoc    │ │
+│  │  └── JiraStoriesParser.parse(jira_path) → JiraStoriesDocument   │ │
+│  │                                                                  │ │
+│  │  Returns: Dict[project_id, ProjectDocuments]                     │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Agent-Specific Context
+
+Each agent receives tailored context from the loaded documents:
+
+| Agent | Context Data | Source |
+|-------|-------------|--------|
+| impacted_modules | module_list, interaction_flow, design_decisions, risks | TDD |
+| estimation_effort | task_breakdown, total_points, assumptions_and_risks | Estimation + TDD |
+| tdd | design_overview, design_patterns, module_designs, full_text | TDD |
+| jira_stories | existing_stories, task_breakdown, total_points | Jira Stories + Estimation |
+
+```python
+# app/services/context_assembler.py
+class ContextAssembler:
+    async def assemble_agent_context(
+        self,
+        agent_name: str,
+        loaded_projects: Dict[str, ProjectDocuments],
+        current_requirement: str,
+    ) -> Dict[str, Any]:
+        """Returns agent-optimized context from loaded documents."""
+        context = {
+            "current_requirement": current_requirement,
+            "similar_projects": []
+        }
+        for project_id, docs in loaded_projects.items():
+            relevant_data = self._get_agent_specific_data(agent_name, docs)
+            context["similar_projects"].append({
+                "project_id": project_id,
+                "project_name": docs.tdd.project_name,
+                "relevant_data": relevant_data
+            })
+        return context
+```
+
+---
+
+### SSE Streaming
+
+The system supports Server-Sent Events for real-time progress updates during pipeline execution.
+
+#### Streaming Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     SSE Streaming Architecture                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Frontend                              Backend                       │
+│  ┌──────────────┐                     ┌──────────────────────────┐  │
+│  │              │  POST /impact/      │                          │  │
+│  │  EventSource │  run-pipeline/stream│   LangGraph Workflow     │  │
+│  │              │ ─────────────────►  │                          │  │
+│  │              │                     │   Agent 1 → Agent 2 ...  │  │
+│  │              │  event: pipeline_   │        │                 │  │
+│  │              │  start              │        │ yield event    │  │
+│  │              │ ◄─────────────────  │        ▼                 │  │
+│  │              │                     │   SSE Generator          │  │
+│  │              │  event: agent_      │                          │  │
+│  │              │  complete           │                          │  │
+│  │              │ ◄─────────────────  │                          │  │
+│  │              │                     │                          │  │
+│  │              │  event: pipeline_   │                          │  │
+│  │              │  complete           │                          │  │
+│  │              │ ◄─────────────────  │                          │  │
+│  └──────────────┘                     └──────────────────────────┘  │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Event Types
+
+| Event | Description | Payload |
+|-------|-------------|---------|
+| `pipeline_start` | Pipeline execution begins | `{session_id, total_agents}` |
+| `agent_complete` | Agent finished processing | `{agent_name, agent_index, progress_percent, output}` |
+| `pipeline_complete` | All agents finished | `{session_id, status, final_output}` |
+| `pipeline_error` | Error occurred | `{session_id, error_message}` |
+
+#### Event Format
+
+```python
+class StreamEvent(BaseModel):
+    type: Literal["pipeline_start", "agent_complete", "pipeline_complete", "pipeline_error"]
+    session_id: str
+    timestamp: str
+    data: StreamEventData
+
+class StreamEventData(BaseModel):
+    agent_name: str | None = None
+    agent_index: int | None = None
+    total_agents: int = 7
+    status: str | None = None
+    output: Dict | None = None
+    progress_percent: int | None = None
+```
 
 ---
 

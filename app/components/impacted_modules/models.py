@@ -14,7 +14,8 @@ class ImpactedModulesRequest(BaseModel):
     """Request to identify impacted modules."""
     session_id: str
     requirement_text: str
-    selected_matches: List[Dict]
+    selected_matches: List[Dict]  # Kept for backward compatibility
+    loaded_projects: Dict[str, Dict] = Field(default_factory=dict)  # Full documents from selected projects
 
 
 class ImpactedModulesResponse(BaseModel):

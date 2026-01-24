@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 
 
@@ -19,10 +19,11 @@ class JiraStoriesRequest(BaseModel):
     """Request to generate Jira stories."""
     session_id: str
     requirement_text: str
-    selected_matches: List[Dict]
+    selected_matches: List[Dict]  # Kept for backward compatibility
     impacted_modules_output: Dict
     estimation_effort_output: Dict
     tdd_output: Dict
+    loaded_projects: Dict[str, Dict] = Field(default_factory=dict)  # Full documents from selected projects
 
 
 class JiraStoriesResponse(BaseModel):

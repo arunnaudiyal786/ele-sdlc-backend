@@ -22,6 +22,7 @@ async def estimation_effort_agent(state: Dict[str, Any]) -> Dict[str, Any]:
             requirement_text=state["requirement_text"],
             selected_matches=state.get("selected_matches", []),
             impacted_modules_output=state.get("impacted_modules_output", {}),
+            loaded_projects=state.get("loaded_projects", {}),
         )
 
         response = await service.process(request)

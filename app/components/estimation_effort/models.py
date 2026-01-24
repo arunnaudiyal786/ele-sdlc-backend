@@ -15,8 +15,9 @@ class EstimationEffortRequest(BaseModel):
     """Request for estimation effort."""
     session_id: str
     requirement_text: str
-    selected_matches: List[Dict]
+    selected_matches: List[Dict]  # Kept for backward compatibility
     impacted_modules_output: Dict
+    loaded_projects: Dict[str, Dict] = Field(default_factory=dict)  # Full documents from selected projects
 
 
 class EstimationEffortResponse(BaseModel):

@@ -25,45 +25,78 @@ async def error_handler_node(state: ImpactAssessmentState) -> dict:
 
 
 async def auto_select_node(state: ImpactAssessmentState) -> dict:
-    """Auto-select top matches if none are pre-selected.
+    """Auto-select top matches and load full documents.
 
-    This enables file-based pipeline execution without manual selection.
-    If selected_matches is empty, auto-selects top 5 matches by score.
+    This node:
+    1. Auto-selects top 3 matches by score (if not pre-selected)
+    2. Loads full documents (TDD, estimation, jira_stories) for selected projects
+    3. Stores loaded_projects in state for agents to use
     """
-    # If matches are already selected, pass through
-    if state.get("selected_matches"):
-        return {
-            "status": "matches_selected",
-            "current_agent": "impacted_modules",
-            "messages": [
-                {
-                    "role": "auto_select",
-                    "content": f"Using {len(state['selected_matches'])} pre-selected matches",
-                }
-            ],
-        }
+    from app.services.context_assembler import ContextAssembler
+    from app.services.project_indexer import ProjectMetadata
+    from app.rag.hybrid_search import HybridSearchService
 
-    # Auto-select top 5 matches from all_matches
-    all_matches = state.get("all_matches", [])
-    if not all_matches:
-        return {
-            "status": "error",
-            "error_message": "No matches found for auto-selection",
-            "current_agent": "error_handler",
-        }
+    # If matches are already selected, use them; otherwise auto-select top 3
+    selected_matches = state.get("selected_matches")
+    if not selected_matches:
+        all_matches = state.get("all_matches", [])
+        if not all_matches:
+            return {
+                "status": "error",
+                "error_message": "No matches found for auto-selection",
+                "current_agent": "error_handler",
+            }
+        # Sort by match_score (descending) and take top 3
+        sorted_matches = sorted(all_matches, key=lambda m: m.get("match_score", 0), reverse=True)
+        selected_matches = sorted_matches[:3]
 
-    # Sort by score (descending) and take top 5
-    sorted_matches = sorted(all_matches, key=lambda m: m.get("score", 0), reverse=True)
-    top_matches = sorted_matches[:5]
+    # Extract project IDs from selected matches
+    project_ids = [m.get("epic_id") for m in selected_matches]
+
+    # Get project metadata from hybrid search service (contains file paths)
+    search_service = HybridSearchService.get_instance()
+    project_matches = await search_service.search_projects(
+        query=state["requirement_text"],
+        top_k=20,  # Get more to find all selected IDs
+    )
+
+    # Filter to only selected projects
+    metadata_list = []
+    for pm in project_matches:
+        if pm.project_id in project_ids:
+            metadata = ProjectMetadata(
+                project_id=pm.project_id,
+                project_name=pm.project_name,
+                summary=pm.summary,
+                folder_path=pm.folder_path,
+                tdd_path=pm.tdd_path,
+                estimation_path=pm.estimation_path,
+                jira_stories_path=pm.jira_stories_path,
+            )
+            metadata_list.append(metadata)
+
+    # Load full documents
+    assembler = ContextAssembler()
+    loaded_projects = await assembler.load_full_documents(
+        project_ids=project_ids,
+        project_metadata=metadata_list,
+    )
+
+    # Convert to dict for state storage
+    loaded_projects_dict = {
+        project_id: docs.model_dump()
+        for project_id, docs in loaded_projects.items()
+    }
 
     return {
-        "selected_matches": top_matches,
+        "selected_matches": selected_matches,
+        "loaded_projects": loaded_projects_dict,
         "status": "matches_selected",
         "current_agent": "impacted_modules",
         "messages": [
             {
                 "role": "auto_select",
-                "content": f"Auto-selected top {len(top_matches)} matches from {len(all_matches)} results",
+                "content": f"Selected {len(selected_matches)} projects and loaded full documents",
             }
         ],
     }
@@ -139,8 +172,7 @@ def create_impact_workflow() -> StateGraph:
     workflow.add_edge("impacted_modules", "estimation_effort")
     workflow.add_edge("estimation_effort", "tdd")
     workflow.add_edge("tdd", "jira_stories")
-    # End after jira_stories (code_impact and risks disabled)
-    workflow.add_edge("jira_stories", END)
+    workflow.add_edge("jira_stories", END)  # End after jira stories generation
     # Temporarily disabled edges
     # workflow.add_edge("jira_stories", "code_impact")
     # workflow.add_edge("code_impact", "risks")
