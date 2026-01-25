@@ -5,14 +5,18 @@ Comprehensive visual guide to the AI Impact Assessment System's data flows, stat
 ## Table of Contents
 
 - [System Overview Flow](#system-overview-flow)
+- [2-Stage RAG Architecture](#2-stage-rag-architecture)
+- [Indexing Deep Dive](#indexing-deep-dive)
 - [LangGraph Workflow Flow](#langgraph-workflow-flow)
 - [Agent Execution Flow](#agent-execution-flow)
 - [Hybrid Search Flow](#hybrid-search-flow)
 - [Context Assembly Flow](#context-assembly-flow)
+- [Document Parsing Flow](#document-parsing-flow)
 - [State Progression Flow](#state-progression-flow)
 - [SSE Streaming Flow](#sse-streaming-flow)
 - [Error Handling Flow](#error-handling-flow)
 - [Data Storage Flow](#data-storage-flow)
+- [Configuration Reference](#configuration-reference)
 
 ---
 
@@ -62,6 +66,284 @@ High-level view of how a requirement flows through the entire system.
 
 ---
 
+## 2-Stage RAG Architecture
+
+The system uses a modern 2-stage RAG architecture for efficient search and document retrieval.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        2-STAGE RAG ARCHITECTURE                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  STAGE 1: LIGHTWEIGHT PROJECT INDEX (Built at Startup)                  │ │
+│  │  ─────────────────────────────────────────────────────                  │ │
+│  │                                                                          │ │
+│  │   data/raw/projects/                     ChromaDB: project_index         │ │
+│  │   ├── PRJ-10051-inventory-sync/     ──►  ┌──────────────────────────┐   │ │
+│  │   │   └── tdd.docx (parse 1.1)          │ project_id: PRJ-10051     │   │ │
+│  │   ├── PRJ-10052-order-fulfillment/      │ project_name: Inventory   │   │ │
+│  │   │   └── tdd.docx (parse 1.1)          │ summary: "Real-time..."   │   │ │
+│  │   └── PRJ-10053-claims-processing/      │ folder_path: /abs/path    │   │ │
+│  │       └── tdd.docx (parse 1.1)          │ tdd_path: /abs/tdd.docx   │   │ │
+│  │                                          │ estimation_path: /abs/... │   │ │
+│  │   Extracted from TDD:                    │ jira_stories_path: ...    │   │ │
+│  │   • project_name (from References)       └──────────────────────────┘   │ │
+│  │   • summary (from 1.1 Purpose)                                          │ │
+│  │                                                                          │ │
+│  │   Embedding: "{project_name} {summary}" → 384-dim vector                │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                       │
+│                                      │ User Query                            │
+│                                      ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  HYBRID SEARCH (70% Semantic + 30% Keyword)                             │ │
+│  │  ────────────────────────────────────────────                           │ │
+│  │   Query: "Build real-time inventory tracking"                           │ │
+│  │                                                                          │ │
+│  │   Results: [PRJ-10051 (0.85), PRJ-10053 (0.72), PRJ-10052 (0.65)]      │ │
+│  │   └─► Top 3 selected automatically                                      │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                       │
+│                                      ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  STAGE 2: ON-DEMAND DOCUMENT LOADING (At Runtime)                       │ │
+│  │  ────────────────────────────────────────────────                       │ │
+│  │                                                                          │ │
+│  │   For each selected project (e.g., PRJ-10051):                          │ │
+│  │                                                                          │ │
+│  │   ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │   │  Load Full Documents via ContextAssembler                        │  │ │
+│  │   │                                                                   │  │ │
+│  │   │  tdd.docx ─────────► TDDParser.parse() ─────────► TDDDocument   │  │ │
+│  │   │                      • epic_description (1.1 Purpose)            │  │ │
+│  │   │                      • scope (1.4 Scope)                         │  │ │
+│  │   │                      • module_list (2.1 table)                   │  │ │
+│  │   │                      • design_patterns (2.4)                     │  │ │
+│  │   │                      • module_designs (Section 3)                │  │ │
+│  │   │                      • full_text (complete doc)                  │  │ │
+│  │   │                                                                   │  │ │
+│  │   │  estimation.xlsx ──► EstimationParser.parse() ─► EstimationDoc  │  │ │
+│  │   │                      • task_breakdown[]                          │  │ │
+│  │   │                      • total_dev_points, total_qa_points         │  │ │
+│  │   │                      • assumptions_and_risks[]                   │  │ │
+│  │   │                                                                   │  │ │
+│  │   │  jira_stories.xlsx ► JiraStoriesParser.parse() ► JiraStoriesDoc │  │ │
+│  │   │                      • stories[] (jira_id, description, points)  │  │ │
+│  │   └──────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                          │ │
+│  │   Result: loaded_projects = {                                           │ │
+│  │     "PRJ-10051": ProjectDocuments(tdd, estimation, jira_stories),       │ │
+│  │     "PRJ-10052": ProjectDocuments(...),                                 │ │
+│  │     "PRJ-10053": ProjectDocuments(...)                                  │ │
+│  │   }                                                                      │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  Benefits:                                                                    │
+│  ✓ Fast search on lightweight metadata (no full docs in ChromaDB)           │
+│  ✓ Full document parsing only when needed (3 projects at a time)            │
+│  ✓ Structured parsing extracts specific sections for each agent             │
+│  ✓ Absolute file paths stored in index for reliable document loading        │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Indexing Deep Dive
+
+Complete technical breakdown of the indexing process.
+
+### Project Folder Structure
+
+```
+data/raw/projects/
+├── PRJ-10051-inventory-sync-automation/
+│   ├── tdd.docx              # Technical Design Document (required)
+│   ├── estimation.xlsx       # Effort estimation spreadsheet
+│   └── jira_stories.xlsx     # Existing Jira stories as templates
+│
+├── PRJ-10052-order-fulfillment/
+│   ├── tdd.docx
+│   ├── estimation.xlsx
+│   └── jira_stories.xlsx
+│
+└── PRJ-10053-claims-processing/
+    ├── tdd.docx
+    ├── estimation.xlsx
+    └── jira_stories.xlsx
+```
+
+### Indexing Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           INDEXING FLOW                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│   $ python scripts/init_vector_db.py                                         │
+│        │                                                                      │
+│        ▼                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐│
+│   │  ProjectIndexer.get_instance()                                          ││
+│   │  Location: app/services/project_indexer.py                              ││
+│   │                                                                          ││
+│   │  Singleton initialization:                                               ││
+│   │  • ChromaVectorStore(persist_dir=settings.chroma_persist_dir)           ││
+│   │  • OllamaEmbeddingService()                                             ││
+│   │  • collection_name = "project_index"                                     ││
+│   └─────────────────────────────────────────────────────────────────────────┘│
+│        │                                                                      │
+│        ▼                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐│
+│   │  indexer.build_index(base_path="data/raw/projects")                     ││
+│   │                                                                          ││
+│   │  Step 1: Scan project folders                                            ││
+│   │  ─────────────────────────────                                           ││
+│   │  for project_folder in base_path.iterdir():                              ││
+│   │      if project_folder.is_dir() and not starts_with("."):               ││
+│   │          metadata = await extract_metadata(project_folder)               ││
+│   │                                                                          ││
+│   │  Step 2: Delete existing collection (if rebuilding)                      ││
+│   │  ─────────────────────────────────────────────────                       ││
+│   │  await vector_store.delete_collection("project_index")                   ││
+│   │                                                                          ││
+│   │  Step 3: Index each project                                              ││
+│   │  ────────────────────────────                                            ││
+│   │  for project in projects:                                                ││
+│   │      await _index_project(project)                                       ││
+│   └─────────────────────────────────────────────────────────────────────────┘│
+│        │                                                                      │
+│        ▼                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐│
+│   │  extract_metadata(project_folder) → ProjectMetadata                     ││
+│   │                                                                          ││
+│   │  ┌────────────────────────────────────────────────────────────────────┐ ││
+│   │  │  1. Extract project_id from folder name                            │ ││
+│   │  │     "PRJ-10051-inventory-sync" → "PRJ-10051"                        │ ││
+│   │  │     Pattern: re.match(r"(PRJ-\d+)", folder_name)                    │ ││
+│   │  │                                                                     │ ││
+│   │  │  2. Load TDD document                                               │ ││
+│   │  │     doc = Document(str(tdd_path))  # python-docx                    │ ││
+│   │  │                                                                     │ ││
+│   │  │  3. Extract project_name from References section                    │ ││
+│   │  │     Search for "PRJ-XXXXX Project Charter" pattern                  │ ││
+│   │  │     Fallback: Derive from folder name                               │ ││
+│   │  │     "PRJ-10051-inventory-sync" → "Inventory Sync"                   │ ││
+│   │  │                                                                     │ ││
+│   │  │  4. Extract summary from 1.1 Purpose section                        │ ││
+│   │  │     Find heading containing "1.1" and "Purpose"                     │ ││
+│   │  │     Return next non-empty paragraph (>20 chars)                     │ ││
+│   │  │                                                                     │ ││
+│   │  │  5. Build metadata object with absolute paths                       │ ││
+│   │  │     folder_path = str(project_folder.absolute())                    │ ││
+│   │  │     tdd_path = str(tdd_path.absolute())                             │ ││
+│   │  │     estimation_path = str(estimation_path.absolute())               │ ││
+│   │  │     jira_stories_path = str(jira_stories_path.absolute())           │ ││
+│   │  └────────────────────────────────────────────────────────────────────┘ ││
+│   └─────────────────────────────────────────────────────────────────────────┘│
+│        │                                                                      │
+│        ▼                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐│
+│   │  _index_project(metadata) → ChromaDB                                    ││
+│   │                                                                          ││
+│   │  1. Generate embedding                                                   ││
+│   │     document_text = f"{project_name} {summary}"                          ││
+│   │     embedding = await embedding_service.embed(document_text)             ││
+│   │                                                                          ││
+│   │     OllamaEmbeddingService:                                              ││
+│   │     • Model: all-minilm (384 dimensions)                                 ││
+│   │     • Preprocessing: lowercase, normalize whitespace, truncate 400 words││
+│   │     • POST http://localhost:11434/api/embed                              ││
+│   │                                                                          ││
+│   │  2. Prepare ChromaDB document                                            ││
+│   │     {                                                                    ││
+│   │       "id": "PRJ-10051",                                                 ││
+│   │       "text": "Inventory Sync Automation Real-time inventory..."        ││
+│   │       "metadata": {                                                      ││
+│   │         "project_id": "PRJ-10051",                                       ││
+│   │         "project_name": "Inventory Sync Automation",                     ││
+│   │         "summary": "Real-time inventory tracking...",                    ││
+│   │         "folder_path": "/abs/path/to/PRJ-10051-inventory-sync",          ││
+│   │         "tdd_path": "/abs/path/to/PRJ-10051.../tdd.docx",                ││
+│   │         "estimation_path": "/abs/path/to/.../estimation.xlsx",           ││
+│   │         "jira_stories_path": "/abs/path/to/.../jira_stories.xlsx",       ││
+│   │         "indexed_at": "2026-01-25T10:30:00"                              ││
+│   │       }                                                                  ││
+│   │     }                                                                    ││
+│   │                                                                          ││
+│   │  3. Add to ChromaDB                                                      ││
+│   │     collection.add(                                                      ││
+│   │       ids=["PRJ-10051"],                                                 ││
+│   │       embeddings=[embedding],  # 384-dim vector                          ││
+│   │       documents=["Inventory Sync Automation Real-time..."],              ││
+│   │       metadatas=[{...}]                                                  ││
+│   │     )                                                                    ││
+│   └─────────────────────────────────────────────────────────────────────────┘│
+│        │                                                                      │
+│        ▼                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────────┐│
+│   │  ChromaDB Storage                                                       ││
+│   │                                                                          ││
+│   │  Location: data/chroma/                                                  ││
+│   │  Collection: impact_assessment_project_index                             ││
+│   │  (prefix from settings.chroma_collection_prefix)                         ││
+│   │                                                                          ││
+│   │  ┌────────────────────────────────────────────────────────────────────┐ ││
+│   │  │  Indexed Data (per project):                                       │ ││
+│   │  │  • ID: PRJ-10051                                                   │ ││
+│   │  │  • Document: "Inventory Sync Automation Real-time inventory..."    │ ││
+│   │  │  • Embedding: [0.123, -0.456, 0.789, ...] (384 floats)            │ ││
+│   │  │  • Metadata: project_id, project_name, summary, file paths         │ ││
+│   │  │                                                                     │ ││
+│   │  │  HNSW Index Settings:                                              │ ││
+│   │  │  • hnsw:space = "cosine" (cosine similarity)                       │ ││
+│   │  └────────────────────────────────────────────────────────────────────┘ ││
+│   └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                               │
+│  Output:                                                                      │
+│  ════════════════════════════════════════════════════════════════════════    │
+│  ✅ SUCCESS: Indexed 3 projects                                               │
+│  ════════════════════════════════════════════════════════════════════════    │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Indexing Scripts Reference
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        INDEXING SCRIPTS                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  scripts/init_vector_db.py                                                   │
+│  ─────────────────────────                                                   │
+│  Purpose: Build project_index from data/raw/projects/                        │
+│  Usage:   python scripts/init_vector_db.py                                   │
+│  When:    First-time setup, after adding new project folders                 │
+│                                                                               │
+│  scripts/reindex.py                                                          │
+│  ──────────────────                                                          │
+│  Purpose: Delete legacy collections (epics, estimations, tdds, stories)      │
+│  Usage:   python scripts/reindex.py                                          │
+│  When:    Before migrating from old CSV-based indexing                       │
+│                                                                               │
+│  scripts/rebuild_project_index.py                                            │
+│  ─────────────────────────────────                                           │
+│  Purpose: Rebuild only the project_index collection                          │
+│  Usage:   python scripts/rebuild_project_index.py                            │
+│  When:    After modifying project folders without full reindex               │
+│                                                                               │
+│  Full Reindex Workflow:                                                       │
+│  ──────────────────────                                                       │
+│  $ python scripts/reindex.py && python scripts/init_vector_db.py             │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## LangGraph Workflow Flow
 
 Detailed view of the LangGraph workflow with all nodes and edges.
@@ -97,7 +379,8 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │     ▼                                                                         │
 │  ┌─────────────────────┐                                                     │
 │  │ Conditional Edge    │                                                     │
-│  │ route_after_match() │                                                     │
+│  │ route_after_        │                                                     │
+│  │ historical_match()  │                                                     │
 │  └──────────┬──────────┘                                                     │
 │             │                                                                 │
 │     ┌───────┴───────┐                                                        │
@@ -110,10 +393,11 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │  │  ─────────────────────                                                  │  │
 │  │  Input:  all_matches[]                                                  │  │
 │  │  Action: 1. Select top 3 matches by score                               │  │
-│  │          2. Load full documents via ContextAssembler                    │  │
-│  │             - TDD document (parsed)                                     │  │
-│  │             - Estimation document (parsed)                              │  │
-│  │             - Jira stories document (parsed)                            │  │
+│  │          2. Get project metadata from HybridSearchService               │  │
+│  │          3. Load full documents via ContextAssembler:                   │  │
+│  │             - TDDParser.parse(tdd_path)                                 │  │
+│  │             - EstimationParser.parse(estimation_path)                   │  │
+│  │             - JiraStoriesParser.parse(jira_stories_path)                │  │
 │  │  Output: selected_matches[], loaded_projects{}                          │  │
 │  │  Status: matches_selected                                               │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
@@ -123,6 +407,8 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │  │  4. IMPACTED MODULES AGENT                                              │  │
 │  │  ───────────────────────────                                            │  │
 │  │  Input:  requirement_text + loaded_projects (TDD module data)           │  │
+│  │  Context: epic_description, module_list[], interaction_flow,            │  │
+│  │           design_decisions, design_patterns, risks                      │  │
 │  │  Action: LLM identifies functional & technical modules                  │  │
 │  │  Output: functional_modules[], technical_modules[], impact_summary      │  │
 │  │  Status: impacted_modules_generated                                     │  │
@@ -133,6 +419,9 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │  │  5. ESTIMATION EFFORT AGENT                                             │  │
 │  │  ────────────────────────────                                           │  │
 │  │  Input:  requirement_text + loaded_projects (estimation data)           │  │
+│  │          + impacted_modules_output (filtered modules from step 4)       │  │
+│  │  Context: epic_description, task_breakdown[], total_dev_points,         │  │
+│  │           total_qa_points, impacted_modules, assumptions_and_risks      │  │
 │  │  Action: LLM estimates effort based on historical patterns              │  │
 │  │  Output: dev_hours, qa_hours, story_points, confidence_level            │  │
 │  │  Status: estimation_effort_completed                                    │  │
@@ -143,6 +432,9 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │  │  6. TDD AGENT                                                           │  │
 │  │  ────────────                                                           │  │
 │  │  Input:  requirement_text + loaded_projects (full TDD data)             │  │
+│  │  Context: epic_description, scope, design_overview, design_patterns,    │  │
+│  │           design_decisions, module_list[], module_designs[],            │  │
+│  │           interaction_flow, full_tdd_text                               │  │
 │  │  Action: LLM generates Technical Design Document                        │  │
 │  │  Output: tdd_name, design_patterns, components[], tdd.md file           │  │
 │  │  Status: tdd_generated                                                  │  │
@@ -153,6 +445,8 @@ Detailed view of the LangGraph workflow with all nodes and edges.
 │  │  7. JIRA STORIES AGENT                                                  │  │
 │  │  ───────────────────────                                                │  │
 │  │  Input:  requirement_text + loaded_projects (jira stories data)         │  │
+│  │  Context: epic_description, existing_stories[], task_breakdown[],       │  │
+│  │           total_dev_points, total_qa_points                             │  │
 │  │  Action: LLM generates user stories and tasks                           │  │
 │  │  Output: stories[] with summary, description, story_points              │  │
 │  │  Status: jira_stories_generated → completed                             │  │
@@ -219,9 +513,13 @@ How each agent processes within the workflow.
 │  │      │              │  SERVICE (TDDService)           │                 │ │
 │  │      │              │  ─────────────────────          │                 │ │
 │  │      │              │  • Assemble LLM context         │                 │ │
+│  │      │              │    via ContextAssembler         │                 │ │
 │  │      │              │  • Call Ollama generate         │                 │ │
+│  │      │              │    (phi3:mini model)            │                 │ │
 │  │      │              │  • Parse JSON response          │                 │ │
+│  │      │              │    via parse_llm_json()         │                 │ │
 │  │      │              │  • Save to audit trail          │                 │ │
+│  │      │              │    via AuditTrailManager        │                 │ │
 │  │      │              │  • Return TDDResponse           │                 │ │
 │  │      │              └─────────────────────────────────┘                 │ │
 │  │      │                                                                   │ │
@@ -237,6 +535,7 @@ How each agent processes within the workflow.
 │        │                                                                      │
 │        ▼                                                                      │
 │  LangGraph MERGES partial update into full state                             │
+│  (messages field uses operator.add reducer for append-only accumulation)     │
 │        │                                                                      │
 │        ▼                                                                      │
 │  Next agent called with updated state                                         │
@@ -266,24 +565,30 @@ How the hybrid search combines semantic and keyword matching.
 │         │                                                 └────────────┘│    │
 │         │                                                               │    │
 │    ┌────┴─────────────────────────────────────────────────────────┐    │    │
-│    │                      PARALLEL SEARCH                          │    │    │
+│    │                      PARALLEL PROCESSING                      │    │    │
 │    │                                                                │    │    │
 │    │  ┌─────────────────────────┐   ┌─────────────────────────┐   │    │    │
-│    │  │   SEMANTIC SEARCH       │   │   KEYWORD SEARCH        │   │    │    │
-│    │  │   ─────────────────     │   │   ──────────────        │   │    │    │
+│    │  │   SEMANTIC SEARCH       │   │   KEYWORD EXTRACTION    │   │    │    │
+│    │  │   ─────────────────     │   │   ──────────────────    │   │    │    │
 │    │  │                         │   │                          │   │    │    │
-│    │  │   1. Embed query        │   │   1. Extract keywords    │   │    │    │
-│    │  │      via Ollama         │   │      authentication,     │   │    │    │
-│    │  │      all-minilm         │   │      OAuth, user,        │   │    │    │
-│    │  │      (384 dimensions)   │   │      system              │   │    │    │
+│    │  │   1. Preprocess query   │   │   1. Extract keywords    │   │    │    │
+│    │  │      lowercase,         │   │      from query          │   │    │    │
+│    │  │      normalize,         │   │      via extract_        │   │    │    │
+│    │  │      truncate 400 words │   │      keywords()          │   │    │    │
 │    │  │                         │   │                          │   │    │    │
-│    │  │   2. Vector similarity  │   │   2. BM25 / text match   │   │    │    │
-│    │  │      search in ChromaDB │   │      against metadata    │   │    │    │
+│    │  │   2. Embed query        │   │   2. Remove stopwords:   │   │    │    │
+│    │  │      via Ollama         │   │      the, a, an, is...   │   │    │    │
+│    │  │      all-minilm         │   │                          │   │    │    │
+│    │  │      (384 dimensions)   │   │   3. Result keywords:    │   │    │    │
+│    │  │                         │   │      ["build", "user",   │   │    │    │
+│    │  │   3. Vector similarity  │   │       "authentication",  │   │    │    │
+│    │  │      search in ChromaDB │   │       "oauth", "system"] │   │    │    │
+│    │  │      (cosine distance)  │   │                          │   │    │    │
 │    │  │                         │   │                          │   │    │    │
-│    │  │   3. Results:           │   │   3. Results:            │   │    │    │
-│    │  │      PRJ-001: 0.89      │   │      PRJ-003: 0.95       │   │    │    │
-│    │  │      PRJ-002: 0.82      │   │      PRJ-001: 0.75       │   │    │    │
-│    │  │      PRJ-003: 0.78      │   │      PRJ-004: 0.60       │   │    │    │
+│    │  │   4. Results:           │   │                          │   │    │    │
+│    │  │      PRJ-001: 0.89      │   │                          │   │    │    │
+│    │  │      PRJ-002: 0.82      │   │                          │   │    │    │
+│    │  │      PRJ-003: 0.78      │   │                          │   │    │    │
 │    │  │                         │   │                          │   │    │    │
 │    │  └────────────┬────────────┘   └────────────┬─────────────┘   │    │    │
 │    │               │                              │                  │    │    │
@@ -291,27 +596,49 @@ How the hybrid search combines semantic and keyword matching.
 │                    │                              │                       │    │
 │                    ▼                              ▼                       │    │
 │              ┌─────────────────────────────────────────────────┐         │    │
+│              │        KEYWORD SCORING (per document)            │         │    │
+│              │        ────────────────────────────────          │         │    │
+│              │                                                  │         │    │
+│              │   For each semantic result:                      │         │    │
+│              │   1. Get document text from result               │         │    │
+│              │   2. Calculate keyword overlap:                  │         │    │
+│              │      keyword_score = matches / total_keywords    │         │    │
+│              │                                                  │         │    │
+│              │   PRJ-001: 3/5 keywords found = 0.60            │         │    │
+│              │   PRJ-003: 4/5 keywords found = 0.80            │         │    │
+│              │   PRJ-002: 1/5 keywords found = 0.20            │         │    │
+│              │                                                  │         │    │
+│              └─────────────────────────────────────────────────┘         │    │
+│                                      │                                   │    │
+│                                      ▼                                   │    │
+│              ┌─────────────────────────────────────────────────┐         │    │
 │              │               SCORE FUSION                       │         │    │
 │              │               ────────────                       │         │    │
 │              │                                                  │         │    │
 │              │   Final = (0.70 × Semantic) + (0.30 × Keyword)  │         │    │
 │              │                                                  │         │    │
-│              │   PRJ-001: (0.70 × 0.89) + (0.30 × 0.75) = 0.85 │         │    │
-│              │   PRJ-003: (0.70 × 0.78) + (0.30 × 0.95) = 0.83 │         │    │
-│              │   PRJ-002: (0.70 × 0.82) + (0.30 × 0.00) = 0.57 │         │    │
+│              │   PRJ-001: (0.70 × 0.89) + (0.30 × 0.60) = 0.80 │         │    │
+│              │   PRJ-003: (0.70 × 0.78) + (0.30 × 0.80) = 0.79 │         │    │
+│              │   PRJ-002: (0.70 × 0.82) + (0.30 × 0.20) = 0.63 │         │    │
 │              │                                                  │         │    │
 │              │   Ranked: PRJ-001, PRJ-003, PRJ-002              │         │    │
 │              │                                                  │         │    │
 │              └─────────────────────────────────────────────────┘         │    │
 │                                                                          │    │
-│         Output: all_matches[] with score_breakdown per match             │    │
+│         Output: List[ProjectMatch] with score_breakdown per match        │    │
 │         {                                                                │    │
 │           "project_id": "PRJ-001",                                       │    │
-│           "match_score": 0.85,                                           │    │
+│           "project_name": "Authentication Module",                       │    │
+│           "summary": "OAuth2 authentication implementation...",          │    │
+│           "match_score": 0.80,                                           │    │
 │           "score_breakdown": {                                           │    │
 │             "semantic_score": 0.89,                                      │    │
-│             "keyword_score": 0.75                                        │    │
-│           }                                                              │    │
+│             "keyword_score": 0.60                                        │    │
+│           },                                                             │    │
+│           "folder_path": "/abs/path/to/PRJ-001-auth",                    │    │
+│           "tdd_path": "/abs/path/to/tdd.docx",                           │    │
+│           "estimation_path": "/abs/path/to/estimation.xlsx",             │    │
+│           "jira_stories_path": "/abs/path/to/jira_stories.xlsx"          │    │
 │         }                                                                │    │
 │                                                                          │    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -339,23 +666,24 @@ How full documents are loaded and assembled for agents.
 │  │  │  PRJ-001                                                           │ │ │
 │  │  │  ─────────                                                         │ │ │
 │  │  │                                                                     │ │ │
-│  │  │  data/projects/PRJ-001/                                            │ │ │
+│  │  │  data/raw/projects/PRJ-001-authentication/                         │ │ │
 │  │  │  ├── tdd.docx ──────────► TDDParser.parse() ──────► TDDDocument   │ │ │
 │  │  │  │                                                                 │ │ │
 │  │  │  ├── estimation.xlsx ──► EstimationParser.parse() ► EstimationDoc │ │ │
 │  │  │  │                                                                 │ │ │
-│  │  │  └── jira_stories.docx ─► JiraStoriesParser.parse() ► JiraStories │ │ │
+│  │  │  └── jira_stories.xlsx ─► JiraStoriesParser.parse() ► JiraStories │ │ │
 │  │  │                                                                     │ │ │
 │  │  └────────────────────────────────────────────────────────────────────┘ │ │
 │  │                                                                          │ │
 │  │  Result: loaded_projects = {                                            │ │
-│  │    "PRJ-001": {                                                          │ │
-│  │      "tdd": TDDDocument(...),                                           │ │
-│  │      "estimation": EstimationDocument(...),                             │ │
-│  │      "jira_stories": JiraStoriesDocument(...)                           │ │
-│  │    },                                                                    │ │
-│  │    "PRJ-002": {...},                                                    │ │
-│  │    "PRJ-003": {...}                                                     │ │
+│  │    "PRJ-001": ProjectDocuments(                                         │ │
+│  │      project_id="PRJ-001",                                              │ │
+│  │      tdd=TDDDocument(...),                                              │ │
+│  │      estimation=EstimationDocument(...),                                │ │
+│  │      jira_stories=JiraStoriesDocument(...)                              │ │
+│  │    ),                                                                    │ │
+│  │    "PRJ-002": ProjectDocuments(...),                                    │ │
+│  │    "PRJ-003": ProjectDocuments(...)                                     │ │
 │  │  }                                                                       │ │
 │  │                                                                          │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
@@ -365,32 +693,160 @@ How full documents are loaded and assembled for agents.
 │                                                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │                 Agent-Specific Context Assembly                          │ │
+│  │                 (via assemble_agent_context())                           │ │
 │  │                                                                          │ │
 │  │  Each agent receives DIFFERENT subsets of the loaded documents:          │ │
 │  │                                                                          │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
 │  │  │  impacted_modules agent receives:                                │   │ │
-│  │  │  • module_list, interaction_flow, design_decisions, risks        │   │ │
-│  │  │  Source: TDD documents                                           │   │ │
+│  │  │  • epic_description                                              │   │ │
+│  │  │  • module_list[] (system, component_name, type, new/existing)    │   │ │
+│  │  │  • interaction_flow                                              │   │ │
+│  │  │  • design_decisions                                              │   │ │
+│  │  │  • design_patterns[]                                             │   │ │
+│  │  │  • risks[]                                                       │   │ │
+│  │  │  Source: TDD document                                            │   │ │
 │  │  └─────────────────────────────────────────────────────────────────┘   │ │
 │  │                                                                          │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
 │  │  │  estimation_effort agent receives:                               │   │ │
-│  │  │  • task_breakdown, total_points, assumptions_and_risks           │   │ │
-│  │  │  Source: Estimation + TDD module_list                            │   │ │
+│  │  │  • epic_description                                              │   │ │
+│  │  │  • total_dev_points, total_qa_points                             │   │ │
+│  │  │  • task_breakdown[] (ticket_id, description, dev/qa points)      │   │ │
+│  │  │  • impacted_modules (from impacted_modules agent output!)        │   │ │
+│  │  │  • assumptions_and_risks[]                                       │   │ │
+│  │  │  Source: Estimation doc + impacted_modules_output                │   │ │
 │  │  └─────────────────────────────────────────────────────────────────┘   │ │
 │  │                                                                          │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
 │  │  │  tdd agent receives:                                             │   │ │
-│  │  │  • design_overview, design_patterns, module_designs, full_text   │   │ │
+│  │  │  • epic_description                                              │   │ │
+│  │  │  • scope                                                         │   │ │
+│  │  │  • design_overview                                               │   │ │
+│  │  │  • design_patterns[]                                             │   │ │
+│  │  │  • design_decisions                                              │   │ │
+│  │  │  • module_list[]                                                 │   │ │
+│  │  │  • module_designs[] (module_name, description, code_samples)     │   │ │
+│  │  │  • interaction_flow                                              │   │ │
+│  │  │  • full_tdd_text (complete document)                             │   │ │
 │  │  │  Source: Full TDD documents                                      │   │ │
 │  │  └─────────────────────────────────────────────────────────────────┘   │ │
 │  │                                                                          │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
 │  │  │  jira_stories agent receives:                                    │   │ │
-│  │  │  • existing_stories, task_breakdown, total_points                │   │ │
-│  │  │  Source: Jira Stories + Estimation                               │   │ │
+│  │  │  • epic_description                                              │   │ │
+│  │  │  • existing_stories[] (jira_id, description, story_points)       │   │ │
+│  │  │  • task_breakdown[]                                              │   │ │
+│  │  │  • total_dev_points, total_qa_points                             │   │ │
+│  │  │  Source: Jira Stories doc + Estimation doc                       │   │ │
 │  │  └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Document Parsing Flow
+
+How each document type is parsed into structured data.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         DOCUMENT PARSING FLOW                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  TDD PARSER (app/services/parsers/tdd_parser.py)                        │ │
+│  │  ─────────────────────────────────────────────────                      │ │
+│  │                                                                          │ │
+│  │  Input: tdd.docx (Word document via python-docx)                        │ │
+│  │                                                                          │ │
+│  │  Extraction Strategy:                                                    │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  Section                  │ Extraction Method                       │ │ │
+│  │  ├────────────────────────────────────────────────────────────────────┤ │ │
+│  │  │  project_id               │ Regex from folder name (PRJ-\d+)       │ │ │
+│  │  │  project_name             │ References section or folder fallback   │ │ │
+│  │  │  epic_description         │ Paragraph after "1.1 Purpose" heading   │ │ │
+│  │  │  scope                    │ Section "1.4 Scope"                     │ │ │
+│  │  │  references[]             │ Section "1.2 References"                │ │ │
+│  │  │  glossary{}               │ First table with Term/Definition cols   │ │ │
+│  │  │  assumptions[]            │ Section "1.5 Assumptions"               │ │ │
+│  │  │  design_overview          │ Section "2. Design Overview"            │ │ │
+│  │  │  module_list[]            │ Module List table (System, Component)   │ │ │
+│  │  │  interaction_flow         │ Section "2.2 Modules Interaction Flow"  │ │ │
+│  │  │  design_decisions         │ Section "2.3 Key Design Decisions"      │ │ │
+│  │  │  design_patterns[]        │ Section "2.4 Design Patterns"           │ │ │
+│  │  │  risks[]                  │ Section "2.5 Risks"                     │ │ │
+│  │  │  module_designs[]         │ Section 3 (SVC/MOD/BTH headings)        │ │ │
+│  │  │  full_text                │ All paragraphs concatenated             │ │ │
+│  │  │  tables[]                 │ All tables with context headings        │ │ │
+│  │  └────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                          │ │
+│  │  Output: TDDDocument (Pydantic model)                                   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  ESTIMATION PARSER (app/services/parsers/estimation_parser.py)          │ │
+│  │  ─────────────────────────────────────────────────────────────          │ │
+│  │                                                                          │ │
+│  │  Input: estimation.xlsx (Excel via pandas)                              │ │
+│  │                                                                          │ │
+│  │  Sheet Discovery (fuzzy matching):                                       │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  Target Sheet            │ Keywords Searched                        │ │ │
+│  │  ├────────────────────────────────────────────────────────────────────┤ │ │
+│  │  │  Task Breakdown          │ "task breakdown", "breakdown", "tasks"   │ │ │
+│  │  │  Dev Estimate            │ "dev estimate", "development"            │ │ │
+│  │  │  QA Estimate             │ "qa estimate", "testing"                 │ │ │
+│  │  │  Assumptions             │ "assumptions", "risks"                   │ │ │
+│  │  │  Sizing Guidelines       │ "sizing", "guidelines"                   │ │ │
+│  │  └────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                          │ │
+│  │  Column Normalization:                                                   │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  Standard Name       │ Variations Matched                           │ │ │
+│  │  ├────────────────────────────────────────────────────────────────────┤ │ │
+│  │  │  module              │ module, component, module_affected, area     │ │ │
+│  │  │  task_description    │ description, task description, work_item     │ │ │
+│  │  │  dev_points          │ dev_effort, development points, story_points │ │ │
+│  │  │  qa_points           │ qa_effort, testing effort, qa points         │ │ │
+│  │  │  ticket_id           │ jira_id, story_id, id, key                   │ │ │
+│  │  │  notes               │ comments, remarks                            │ │ │
+│  │  └────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                          │ │
+│  │  Story Points Parsing:                                                   │ │
+│  │  • Handles "DEV: 45 Points\nQA: 25 Points" format                       │ │
+│  │  • Handles separate dev_points/qa_points columns                        │ │
+│  │  • Handles single combined points value                                  │ │
+│  │                                                                          │ │
+│  │  Output: EstimationDocument with task_breakdown[], totals               │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  JIRA STORIES PARSER (app/services/parsers/jira_stories_parser.py)      │ │
+│  │  ───────────────────────────────────────────────────────────────        │ │
+│  │                                                                          │ │
+│  │  Input: jira_stories.xlsx (Excel via pandas)                            │ │
+│  │                                                                          │ │
+│  │  Sheet: "Jira Stories" (fallback to first sheet)                        │ │
+│  │                                                                          │ │
+│  │  Column Discovery:                                                       │ │
+│  │  ┌────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  Field            │ Keywords Searched                               │ │ │
+│  │  ├────────────────────────────────────────────────────────────────────┤ │ │
+│  │  │  jira_id          │ jiraid, jira_id, story_id, id, key             │ │ │
+│  │  │  description      │ jira_description, description, summary, story   │ │ │
+│  │  │  story_points     │ story_points, story points, points              │ │ │
+│  │  │  priority         │ priority                                        │ │ │
+│  │  │  status           │ status                                          │ │ │
+│  │  └────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                          │ │
+│  │  Output: JiraStoriesDocument with stories[]                             │ │
 │  │                                                                          │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │
@@ -408,7 +864,7 @@ How the workflow state evolves through pipeline execution.
 │                        STATE PROGRESSION FLOW                                 │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                               │
-│  Initial State                                                                │
+│  Initial State (from API request)                                            │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │ {                                                                        │ │
 │  │   session_id: "sess-123",                                               │ │
@@ -421,38 +877,53 @@ How the workflow state evolves through pipeline execution.
 │         ▼                                                                     │
 │  ┌───────────────────┐                                                       │
 │  │ requirement_agent │ ──► status: "requirement_submitted"                   │
-│  └───────────────────┘     + extracted_keywords: ["OAuth", "authentication"]│
+│  └───────────────────┘     + extracted_keywords: ["OAuth", "authentication"] │
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌────────────────────────┐                                                  │
 │  │ historical_match_agent │ ──► status: "matches_found"                      │
 │  └────────────────────────┘     + all_matches: [{...}, {...}, {...}]        │
-│         │                                                                     │
+│         │                       + timing: {historical_match_ms: 1250}        │
 │         ▼                                                                     │
 │  ┌──────────────────┐                                                        │
 │  │ auto_select_node │ ──► status: "matches_selected"                         │
 │  └──────────────────┘     + selected_matches: [{...}, {...}, {...}]         │
-│         │                 + loaded_projects: {PRJ-001: {...}, ...}          │
+│         │                 + loaded_projects: {                               │
+│         │                     "PRJ-001": {tdd: {...}, estimation: {...}},    │
+│         │                     "PRJ-002": {...},                              │
+│         │                     "PRJ-003": {...}                               │
+│         │                   }                                                │
 │         ▼                                                                     │
 │  ┌─────────────────────────┐                                                 │
 │  │ impacted_modules_agent  │ ──► status: "impacted_modules_generated"        │
-│  └─────────────────────────┘     + impacted_modules_output: {...}           │
-│         │                                                                     │
+│  └─────────────────────────┘     + impacted_modules_output: {                │
+│         │                            functional_modules: [...],              │
+│         │                            technical_modules: [...],               │
+│         │                            impact_summary: "..."                   │
+│         │                        }                                           │
 │         ▼                                                                     │
 │  ┌─────────────────────────┐                                                 │
 │  │ estimation_effort_agent │ ──► status: "estimation_effort_completed"       │
-│  └─────────────────────────┘     + estimation_effort_output: {...}          │
-│         │                                                                     │
+│  └─────────────────────────┘     + estimation_effort_output: {               │
+│         │                            dev_hours: 120,                         │
+│         │                            qa_hours: 40,                           │
+│         │                            story_points: 34,                       │
+│         │                            confidence_level: "medium"              │
+│         │                        }                                           │
 │         ▼                                                                     │
 │  ┌────────────┐                                                              │
 │  │ tdd_agent  │ ──► status: "tdd_generated"                                  │
-│  └────────────┘     + tdd_output: {...}                                     │
-│         │                                                                     │
+│  └────────────┘     + tdd_output: {                                         │
+│         │               tdd_name: "...",                                    │
+│         │               design_patterns: [...],                             │
+│         │               components: [...]                                   │
+│         │           }                                                        │
 │         ▼                                                                     │
 │  ┌───────────────────┐                                                       │
 │  │ jira_stories_agent│ ──► status: "jira_stories_generated" → "completed"   │
-│  └───────────────────┘     + jira_stories_output: {...}                     │
-│         │                                                                     │
+│  └───────────────────┘     + jira_stories_output: {                         │
+│         │                      stories: [{summary, description, points}]    │
+│         │                  }                                                 │
 │         ▼                                                                     │
 │  Final State                                                                  │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
@@ -468,6 +939,7 @@ How the workflow state evolves through pipeline execution.
 │  │   tdd_output: {...},                                                    │ │
 │  │   jira_stories_output: {...},                                           │ │
 │  │   status: "completed",                                                  │ │
+│  │   timing: {historical_match_ms: 1250, ...},                            │ │
 │  │   messages: [{role: "requirement", ...}, {role: "search", ...}, ...]   │ │
 │  │ }                                                                        │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
@@ -587,7 +1059,7 @@ How errors propagate and are handled in the workflow.
 │                                                                               │
 │  ─────────────────────────────────────────────────────────────────────────   │
 │                                                                               │
-│  Exception Hierarchy:                                                         │
+│  Exception Hierarchy (app/components/base/exceptions.py):                    │
 │                                                                               │
 │  ComponentError (base)                                                        │
 │  ├── SessionNotFoundError                                                    │
@@ -599,6 +1071,17 @@ How errors propagate and are handled in the workflow.
 │  ├── OllamaUnavailableError                                                  │
 │  ├── OllamaTimeoutError                                                      │
 │  └── VectorDBError                                                           │
+│                                                                               │
+│  ─────────────────────────────────────────────────────────────────────────   │
+│                                                                               │
+│  JSON Parsing Recovery (app/utils/json_repair.py):                           │
+│                                                                               │
+│  parse_llm_json() handles:                                                    │
+│  • Trailing commas in objects/arrays                                          │
+│  • Unquoted keys                                                              │
+│  • Truncated/incomplete JSON                                                  │
+│  • Code blocks (```json ... ```)                                             │
+│  • Mixed content before/after JSON                                            │
 │                                                                               │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -622,6 +1105,7 @@ How data flows to persistent storage during pipeline execution.
 │  │        ▼                                                                 │ │
 │  │   ┌─────────────────────────────────────────────────────────────────┐   │ │
 │  │   │  AuditTrailManager(session_id)                                   │   │ │
+│  │   │  Location: app/utils/audit.py                                    │   │ │
 │  │   │                                                                   │   │ │
 │  │   │  audit.save_json("requirement.json", data, subfolder="step1")   │   │ │
 │  │   │  audit.save_text("prompt.txt", prompt, subfolder="agent_tdd")   │   │ │
@@ -638,7 +1122,7 @@ How data flows to persistent storage during pipeline execution.
 │  │   │  │   ├── requirement.json       ◄── Original requirement        │   │ │
 │  │   │  │   └── extracted_keywords.json                                 │   │ │
 │  │   │  ├── step2_historical_match/                                     │   │ │
-│  │   │  │   ├── search_request.json    ◄── Search parameters           │   │ │
+│  │   │  │   ├── historical_match_request.json  ◄── Search parameters   │   │ │
 │  │   │  │   ├── all_matches.json       ◄── Full search results         │   │ │
 │  │   │  │   └── selected_matches.json  ◄── Selected top 3              │   │ │
 │  │   │  ├── step3_agents/                                               │   │ │
@@ -669,22 +1153,79 @@ How data flows to persistent storage during pipeline execution.
 │  │   │  Collections:                                                    │   │ │
 │  │   │                                                                   │   │ │
 │  │   │  ┌───────────────────────────────────────────────────────────┐  │   │ │
-│  │   │  │  project_index (PRIMARY - used for search)                 │  │   │ │
-│  │   │  │  ────────────────────────────────────────                  │  │   │ │
+│  │   │  │  impact_assessment_project_index (PRIMARY - used for search)│  │   │ │
+│  │   │  │  ──────────────────────────────────────────────────────────│  │   │ │
 │  │   │  │  • Lightweight metadata per project                        │  │   │ │
-│  │   │  │  • Fields: project_id, project_name, summary, folder_path │  │   │ │
-│  │   │  │  • Fast search, no full documents                          │  │   │ │
+│  │   │  │  • Fields: project_id, project_name, summary               │  │   │ │
+│  │   │  │  • File paths: folder_path, tdd_path, estimation_path,     │  │   │ │
+│  │   │  │               jira_stories_path                            │  │   │ │
+│  │   │  │  • Embedding: 384-dim vector (project_name + summary)      │  │   │ │
+│  │   │  │  • HNSW index with cosine similarity                       │  │   │ │
 │  │   │  └───────────────────────────────────────────────────────────┘  │   │ │
 │  │   │                                                                   │   │ │
-│  │   │  ┌───────────────────────────────────────────────────────────┐  │   │ │
-│  │   │  │  epics, estimations, tdds, stories (LEGACY)               │  │   │ │
-│  │   │  │  ─────────────────────────────────────────                 │  │   │ │
-│  │   │  │  • Full document data from CSV files                       │  │   │ │
-│  │   │  │  • Used for backward compatibility                         │  │   │ │
-│  │   │  └───────────────────────────────────────────────────────────┘  │   │ │
+│  │   │  Note: Legacy collections (epics, estimations, tdds, stories)    │   │ │
+│  │   │  are no longer used. Delete with reindex.py if present.          │   │ │
 │  │   │                                                                   │   │ │
 │  │   └─────────────────────────────────────────────────────────────────┘   │ │
 │  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │                      PROJECT DATA STORAGE                                │ │
+│  │                                                                          │ │
+│  │   data/raw/projects/                                                     │ │
+│  │   ┌─────────────────────────────────────────────────────────────────┐   │ │
+│  │   │  PRJ-XXXXX-project-name/                                        │   │ │
+│  │   │  ├── tdd.docx              ◄── Required: Technical Design Doc   │   │ │
+│  │   │  │   Sections: Purpose, Scope, References, Module List,         │   │ │
+│  │   │  │   Design Overview, Module Designs, Risks                     │   │ │
+│  │   │  │                                                               │   │ │
+│  │   │  ├── estimation.xlsx       ◄── Effort estimation spreadsheet    │   │ │
+│  │   │  │   Sheets: Task Breakdown, Dev Estimate, QA Estimate,         │   │ │
+│  │   │  │   Assumptions & Risks, Sizing Guidelines                     │   │ │
+│  │   │  │                                                               │   │ │
+│  │   │  └── jira_stories.xlsx     ◄── Existing Jira stories            │   │ │
+│  │   │      Columns: JiraID, Description, Story Points, Priority       │   │ │
+│  │   └─────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                          │ │
+│  └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Configuration Reference
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        CONFIGURATION REFERENCE                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Location: app/components/base/config.py                                     │
+│  Override: .env file or environment variables                                 │
+│                                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐ │
+│  │  Setting                    │ Default          │ Description             │ │
+│  ├─────────────────────────────────────────────────────────────────────────┤ │
+│  │  OLLAMA_BASE_URL            │ localhost:11434  │ Ollama server URL       │ │
+│  │  OLLAMA_GEN_MODEL           │ phi3:mini        │ Text generation model   │ │
+│  │  OLLAMA_EMBED_MODEL         │ all-minilm       │ Embedding model (384d)  │ │
+│  │  OLLAMA_TIMEOUT_SECONDS     │ 120              │ LLM request timeout     │ │
+│  │  OLLAMA_TEMPERATURE         │ 0.3              │ Generation temperature  │ │
+│  │  OLLAMA_MAX_TOKENS          │ 2048             │ Max response tokens     │ │
+│  ├─────────────────────────────────────────────────────────────────────────┤ │
+│  │  CHROMA_PERSIST_DIR         │ ./data/chroma    │ ChromaDB storage path   │ │
+│  │  CHROMA_COLLECTION_PREFIX   │ impact_assessment│ Collection name prefix  │ │
+│  ├─────────────────────────────────────────────────────────────────────────┤ │
+│  │  SEARCH_SEMANTIC_WEIGHT     │ 0.70             │ Semantic search weight  │ │
+│  │  SEARCH_KEYWORD_WEIGHT      │ 0.30             │ Keyword search weight   │ │
+│  │  SEARCH_MAX_RESULTS         │ 10               │ Max search results      │ │
+│  │  SEARCH_MIN_SCORE_THRESHOLD │ 0.3              │ Minimum match score     │ │
+│  ├─────────────────────────────────────────────────────────────────────────┤ │
+│  │  DATA_RAW_PATH              │ ./data/raw       │ Raw data directory      │ │
+│  │  DATA_UPLOADS_PATH          │ ./data/uploads   │ Uploaded files          │ │
+│  │  DATA_SESSIONS_PATH         │ ./sessions       │ Session audit trails    │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -717,11 +1258,32 @@ How data flows to persistent storage during pipeline execution.
 | 2 | historical_match_agent | requirement_text | all_matches |
 | 3 | auto_select_node | all_matches | selected_matches, loaded_projects |
 | 4 | impacted_modules_agent | loaded_projects | impacted_modules_output |
-| 5 | estimation_effort_agent | loaded_projects | estimation_effort_output |
+| 5 | estimation_effort_agent | loaded_projects + impacted_modules_output | estimation_effort_output |
 | 6 | tdd_agent | loaded_projects | tdd_output |
 | 7 | jira_stories_agent | loaded_projects | jira_stories_output |
 
 ---
 
-*Document Version: 2.0*
+## Quick Reference: Key File Locations
+
+| Component | Location |
+|-----------|----------|
+| Workflow Definition | `app/components/orchestrator/workflow.py` |
+| State Schema | `app/components/orchestrator/state.py` |
+| Project Indexer | `app/services/project_indexer.py` |
+| Hybrid Search | `app/rag/hybrid_search.py` |
+| Vector Store | `app/rag/vector_store.py` |
+| Embeddings | `app/rag/embeddings.py` |
+| Context Assembler | `app/services/context_assembler.py` |
+| TDD Parser | `app/services/parsers/tdd_parser.py` |
+| Estimation Parser | `app/services/parsers/estimation_parser.py` |
+| Jira Stories Parser | `app/services/parsers/jira_stories_parser.py` |
+| Configuration | `app/components/base/config.py` |
+| Audit Trail | `app/utils/audit.py` |
+| JSON Repair | `app/utils/json_repair.py` |
+
+---
+
+*Document Version: 3.0*
 *Last Updated: January 2026*
+*Architecture: 2-Stage RAG with On-Demand Document Loading*

@@ -32,6 +32,43 @@ The `start_dev.sh` script automatically:
 
 ---
 
+## What's New (2026-01 Update)
+
+**Key architectural changes** for returning developers:
+
+### 1. Auto-Select Workflow Node
+The pipeline now auto-selects top 3 historical matches and loads full documents automatically. No manual match selection required unless you want to override.
+
+### 2. On-Demand Document Loading
+Full documents (TDD, estimation, jira_stories) are loaded from `data/raw/projects/` **only for selected projects** (3 max), not indexed in ChromaDB. This reduces index size and speeds up search.
+
+### 3. New Service Layer
+- **ProjectIndexer** (`app/services/project_indexer.py`) - Lightweight project metadata index
+- **ContextAssembler** (`app/services/context_assembler.py`) - Loads documents and assembles agent context
+- **Parsers** (`app/services/parsers/`) - TDD, Estimation, Jira Stories parsers
+
+### 4. Project Folder Structure
+Projects must now be in `data/raw/projects/` with this structure:
+```
+data/raw/projects/
+├── PRJ-10051/
+│   ├── tdd.docx
+│   ├── estimation.xlsx
+│   └── jira_stories.xlsx
+└── PRJ-10052/
+    └── ...
+```
+
+CSV files (`epics.csv`, `estimations.csv`, etc.) are still supported for backward compatibility but not primary data source.
+
+### 5. New Scripts
+- `rebuild_project_index.py` - Rebuild project index after adding new projects
+- `generate_sample_docs.py` - Generate test documents for development
+
+See **Architecture Changes** section below for detailed explanation.
+
+---
+
 ## Detailed Setup
 
 ### 1. Create Virtual Environment
@@ -198,20 +235,24 @@ Ensure your data files and project folders exist in `data/raw/`:
 
 ```
 data/raw/
-├── epics.csv               # Epic definitions
-├── estimations.csv         # Estimation data
-├── tdds.csv                # TDD metadata
-├── stories_tasks.csv       # Jira stories
-├── gitlab_code.json        # Code references
-└── projects/               # Project folders (for document loading)
+├── epics.csv               # Epic definitions (legacy, for CSV-based search)
+├── estimations.csv         # Estimation data (legacy)
+├── tdds.csv                # TDD metadata (legacy)
+├── stories_tasks.csv       # Jira stories (legacy)
+├── gitlab_code.json        # Code references (legacy)
+└── projects/               # Project folders (primary source for new workflow)
     ├── PRJ-10051/
     │   ├── tdd.docx        # Full TDD document
     │   ├── estimation.xlsx # Full estimation sheet
-    │   └── jira_stories.docx # Full stories document
+    │   └── jira_stories.xlsx # Full stories document
     ├── PRJ-10052/
-    │   └── ...
+    │   ├── tdd.docx
+    │   ├── estimation.xlsx
+    │   └── jira_stories.xlsx
     └── ...
 ```
+
+**Important**: The new workflow primarily uses `projects/` folders. CSV files are maintained for backward compatibility and fallback search.
 
 ### Run Initialization Script
 
@@ -219,9 +260,10 @@ data/raw/
 python scripts/init_vector_db.py
 ```
 
-This creates multiple ChromaDB collections including:
-- **project_index** - Lightweight metadata for fast search
-- **epics, estimations, tdds, stories** - Full document data
+This creates multiple ChromaDB collections:
+- **project_index** - Lightweight metadata (project_name + summary) for fast hybrid search
+- **epics, estimations, tdds, stories** - Legacy CSV-based collections (for fallback)
+- **code** - Code references from gitlab_code.json
 
 Expected output:
 
@@ -233,8 +275,10 @@ Indexed 3 estimations
 Indexed 3 TDD sections
 Indexed 3 stories
 Indexed 9 code blocks
+Building project index from data/raw/projects/
+Indexed 3 projects in project_index
 Initialization complete!
-Collections: ['impact_assessment_stories', 'impact_assessment_epics', ...]
+Collections: ['project_index', 'impact_assessment_stories', 'impact_assessment_epics', ...]
 ```
 
 ---
@@ -294,6 +338,68 @@ Expected response:
 ```
 
 Or press `Ctrl+C` if running in foreground.
+
+---
+
+## Architecture Changes (2026-01 Update)
+
+### New Auto-Select Workflow
+
+The pipeline now includes an **auto-select node** that automatically:
+1. Selects top 3 matches by score (if not pre-selected)
+2. Loads full documents (TDD, estimation, jira_stories) for selected projects
+3. Stores loaded documents in state for agents to use
+
+**Workflow Sequence:**
+```
+requirement → historical_match → auto_select → impacted_modules
+           → estimation_effort → tdd → jira_stories → END
+```
+
+The `auto_select` node uses the **ContextAssembler** service to load full documents on-demand, replacing the old CSV-based approach.
+
+### New Service Layer
+
+**app/services/** - Core services for document processing:
+
+| Service | Purpose |
+|---------|---------|
+| `project_indexer.py` | Manages lightweight project metadata index in ChromaDB |
+| `context_assembler.py` | Loads full documents and assembles agent-specific context |
+| `parsers/` | Document parsers for TDD, Estimation, Jira stories |
+
+**Key Benefits:**
+- **Fast Search**: Lightweight project index (project_name + summary only)
+- **On-Demand Loading**: Full documents loaded only for selected projects (3 projects)
+- **Agent-Specific Context**: Each agent receives only the data it needs
+
+### Document Loading Strategy
+
+**Old Approach (CSV-based):**
+- All data indexed in ChromaDB collections (epics, estimations, tdds, stories)
+- Agents search collections directly
+- All document data always loaded
+
+**New Approach (Hybrid):**
+1. **Project Index**: Lightweight metadata (project_name + summary) for fast search
+2. **Auto-Select**: Selects top matches, loads full documents from `data/raw/projects/`
+3. **Context Assembly**: Each agent receives tailored context:
+   - `impacted_modules`: TDD module data (module_list, interaction_flow, design_decisions)
+   - `estimation_effort`: Estimation data + filtered impacted modules
+   - `tdd`: Full TDD content (design patterns, module designs, full text)
+   - `jira_stories`: Jira stories + task breakdowns
+
+### New Components
+
+**project_search** (`app/components/project_search/`):
+- On-demand document retrieval from ChromaDB
+- Lightweight project index querying
+- Fast metadata-only search for project discovery
+
+**admin** (`app/components/admin/`):
+- Administrative operations and system management
+- Database maintenance endpoints
+- System monitoring and diagnostics
 
 ---
 
@@ -373,11 +479,17 @@ python scripts/init_vector_db.py
 
 ### Rebuild Project Index Only
 
-If you've added new project folders, rebuild just the project index:
+If you've added new project folders to `data/raw/projects/`, rebuild just the project index without affecting other collections:
 
 ```bash
 python scripts/rebuild_project_index.py
 ```
+
+This script:
+- Scans `data/raw/projects/` for project directories
+- Extracts metadata from TDD documents (project name, epic description)
+- Creates lightweight ChromaDB index for fast hybrid search
+- Does NOT load full documents (loaded on-demand by agents)
 
 ### One-liner
 
@@ -560,6 +672,31 @@ pytest tests/test_specific.py    # Single file
 pytest --asyncio-mode=auto       # Async tests
 ```
 
+### Database Management Scripts
+
+```bash
+# Initialize all collections (first-time setup)
+python scripts/init_vector_db.py
+
+# Delete all collections (use before full rebuild)
+python scripts/reindex.py
+
+# Rebuild only project index (after adding new projects)
+python scripts/rebuild_project_index.py
+
+# Generate sample project documents for testing
+python scripts/generate_sample_docs.py
+
+# Full rebuild workflow
+python scripts/reindex.py && python scripts/init_vector_db.py
+```
+
+**When to use each script:**
+- `init_vector_db.py` - First time setup, or after adding new data files/projects
+- `reindex.py` - Clear database before rebuilding (deletes all collections)
+- `rebuild_project_index.py` - Added new project folders to `data/raw/projects/`
+- `generate_sample_docs.py` - Need test data for development
+
 ### Check Application Logs
 
 Logs are structured JSON format (via structlog):
@@ -619,6 +756,62 @@ rm -rf data/chroma/*
 python scripts/init_vector_db.py
 ```
 
+### Error: Project Index Empty
+
+**Problem**: Search returns no results despite having projects in `data/raw/projects/`.
+
+**Solution**: Rebuild the project index:
+```bash
+python scripts/rebuild_project_index.py
+```
+
+Verify projects were indexed:
+```bash
+# Check collection exists in ChromaDB
+ls -la data/chroma/
+```
+
+### Error: Auto-Select Fails
+
+**Problem**: `auto_select` node fails with "No matches found" or document loading errors.
+
+**Root Causes**:
+1. Project index not built
+2. Project folders missing required files (tdd.docx, estimation.xlsx, jira_stories.xlsx)
+3. File paths in metadata don't match actual file locations
+
+**Solution**:
+```bash
+# 1. Verify project structure
+ls -la data/raw/projects/PRJ-*/
+
+# Each project folder should have:
+# - tdd.docx
+# - estimation.xlsx
+# - jira_stories.xlsx
+
+# 2. Rebuild project index
+python scripts/rebuild_project_index.py
+
+# 3. Check logs for specific errors
+# Look for "Failed to load documents for PROJECT_ID" messages
+```
+
+### Error: Document Parser Failures
+
+**Problem**: `ContextAssembler` fails to parse documents (TDD, estimation, stories).
+
+**Common Issues**:
+- TDD missing "1.1 Purpose" section
+- Estimation file has unexpected column names
+- Jira stories file has different structure than expected
+
+**Solution**:
+Check parser requirements in `app/services/parsers/`:
+- `tdd_parser.py` - Expects section "1.1 Purpose" for summary
+- `estimation_parser.py` - Expects specific column headers
+- `jira_stories_parser.py` - Expects story ID, title, description columns
+
 ---
 
 ## Full Stack (Frontend + Backend)
@@ -647,11 +840,18 @@ Access the full application at: `http://localhost:3000`
 
 | Service | Default URL | Purpose |
 |---------|-------------|---------|
-| Backend API | http://localhost:8000 | FastAPI server |
-| Pipeline API | http://localhost:8001 | Data Engineering Pipeline |
-| Frontend | http://localhost:3000 | React/Next.js UI |
-| Ollama | http://localhost:11434 | Local LLM runtime |
-| ChromaDB | ./data/chroma | Vector store (file-based) |
+| Backend API | http://localhost:8000 | FastAPI + LangGraph orchestration |
+| Frontend | http://localhost:3000 | Next.js 16 + React 19 UI |
+| Ollama | http://localhost:11434 | Local LLM runtime (embeddings + generation) |
+| ChromaDB | ./data/chroma | Vector store (file-based, multiple collections) |
+
+**ChromaDB Collections:**
+- `project_index` - Lightweight project metadata for hybrid search
+- `impact_assessment_epics` - Epic data from epics.csv (legacy)
+- `impact_assessment_estimations` - Estimation data from estimations.csv (legacy)
+- `impact_assessment_tdds` - TDD data from tdds.csv (legacy)
+- `impact_assessment_stories` - Stories from stories_tasks.csv (legacy)
+- `impact_assessment_code` - Code references from gitlab_code.json
 
 ---
 
@@ -1553,26 +1753,11 @@ source ../.venv/bin/activate
 ./start_dev.sh  # Starts Ollama, ChromaDB init, and API on 8000
 ```
 
-### Terminal 2: Data Engineering Pipeline (port 8001)
-
-```bash
-cd ele-sdlc-backend
-source ../.venv/bin/activate
-uvicorn pipeline.main:app --host 0.0.0.0 --port 8001 --reload
-```
-
-### Terminal 3: Batch Processor (optional)
-
-```bash
-cd ele-sdlc-backend
-source ../.venv/bin/activate
-python -m pipeline.watchers.batch_processor
-```
-
-### Terminal 4: Frontend (port 3000)
+### Terminal 2: Frontend (port 3000)
 
 ```bash
 cd ele-sdlc-frontend
+npm install  # First time only
 npm run dev
 ```
 
@@ -1580,21 +1765,19 @@ npm run dev
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Assessment API | http://localhost:8000 | Main LangGraph orchestration |
-| Pipeline API | http://localhost:8001 | Document processing pipeline |
-| Batch Processor | (background) | Auto-process inbox files |
-| Frontend | http://localhost:3000 | React/Next.js UI |
+| Backend API | http://localhost:8000 | FastAPI + LangGraph orchestration |
+| Frontend | http://localhost:3000 | Next.js 16 + React 19 UI |
 | Ollama | http://localhost:11434 | Local LLM runtime |
 
 ### Health Check All Services
 
 ```bash
-# Assessment API
+# Backend API
 curl http://localhost:8000/api/v1/health
-
-# Pipeline API
-curl http://localhost:8001/api/v1/pipeline/health
 
 # Ollama
 curl http://localhost:11434/api/tags
+
+# Frontend (check if running)
+curl http://localhost:3000
 ```
