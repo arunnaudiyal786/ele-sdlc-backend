@@ -25,9 +25,10 @@ echo -e "${CYAN}This script will:${NC}"
 echo -e "  ${DIM}1. Verify environment configuration (.env files)${NC}"
 echo -e "  ${DIM}2. Setup Python virtual environment${NC}"
 echo -e "  ${DIM}3. Check and start Ollama with required models${NC}"
-echo -e "  ${DIM}4. Verify project data structure (epic.csv + project folders)${NC}"
-echo -e "  ${DIM}5. Initialize/rebuild ChromaDB vector store${NC}"
-echo -e "  ${DIM}6. Start backend and frontend services${NC}"
+echo -e "  ${DIM}4. Generate epic.csv from project folders${NC}"
+echo -e "  ${DIM}5. Verify project data structure (epic.csv + project folders)${NC}"
+echo -e "  ${DIM}6. Initialize/rebuild ChromaDB vector store${NC}"
+echo -e "  ${DIM}7. Start backend and frontend services${NC}"
 echo ""
 
 # Function to check environment files
@@ -160,6 +161,95 @@ check_ollama() {
         ollama pull phi3:mini
     fi
     echo -e "${GREEN}✓ Required models available${NC}"
+}
+
+# Function to generate epic.csv from project folders
+generate_epic_csv() {
+    echo -e "\n${YELLOW}▶ Generating Epic CSV from Project Folders...${NC}"
+
+    cd "$BACKEND_DIR"
+
+    # Check if projects directory exists and has project folders
+    if [ ! -d "data/raw/projects" ]; then
+        echo -e "  ${YELLOW}⚠ No data/raw/projects directory found${NC}"
+        echo -e "  ${DIM}Cannot generate epic.csv without project folders${NC}"
+        cd "$SCRIPT_DIR"
+        return 0  # Non-fatal, check_data_files will report the issue
+    fi
+
+    # Count project folders (directories only, excluding epic.csv)
+    PROJECT_COUNT=$(ls -d data/raw/projects/*/ 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$PROJECT_COUNT" -eq 0 ]; then
+        echo -e "  ${YELLOW}⚠ No project folders found in data/raw/projects/${NC}"
+        echo -e "  ${DIM}Cannot generate epic.csv without project folders${NC}"
+        cd "$SCRIPT_DIR"
+        return 0
+    fi
+
+    # Check if epic.csv exists
+    if [ ! -f "data/raw/projects/epic.csv" ]; then
+        # No epic.csv - generate it
+        echo -e "  ${YELLOW}⚠ epic.csv not found${NC}"
+        echo -e "\n  ${BOLD}Generate epic.csv from project folders?${NC}"
+        echo -e "  ${DIM}Found ${PROJECT_COUNT} project folders to extract from${NC}"
+        echo -e "\n  ${CYAN}[Y]${NC} Yes, generate epic.csv ${DIM}(recommended)${NC}"
+        echo -e "  ${CYAN}[N]${NC} No, skip"
+        echo ""
+        read -p "  Your choice [Y/n]: " GENERATE_CHOICE
+        GENERATE_CHOICE=${GENERATE_CHOICE:-Y}
+
+        if [[ "$GENERATE_CHOICE" =~ ^[Yy]$ ]]; then
+            echo ""
+            echo -e "  ${CYAN}Extracting epic info from project folders...${NC}"
+            python scripts/extract_epic_info.py
+            if [ $? -eq 0 ]; then
+                echo -e "  ${GREEN}✓ epic.csv generated successfully${NC}"
+            else
+                echo -e "  ${RED}✗ Failed to generate epic.csv${NC}"
+                cd "$SCRIPT_DIR"
+                return 1
+            fi
+        else
+            echo ""
+            echo -e "  ${YELLOW}⚠ Skipping epic.csv generation${NC}"
+        fi
+    else
+        # epic.csv exists - offer to regenerate
+        EPIC_COUNT=$(tail -n +2 data/raw/projects/epic.csv 2>/dev/null | wc -l | tr -d ' ')
+        echo -e "  ${GREEN}✓ epic.csv exists (${EPIC_COUNT} epics)${NC}"
+        echo -e "  ${DIM}Project folders: ${PROJECT_COUNT}${NC}"
+
+        # Check if counts differ (might indicate new projects)
+        if [ "$EPIC_COUNT" != "$PROJECT_COUNT" ]; then
+            echo -e "  ${YELLOW}⚠ Count mismatch: ${EPIC_COUNT} epics vs ${PROJECT_COUNT} project folders${NC}"
+        fi
+
+        echo -e "\n  ${BOLD}Regenerate epic.csv?${NC}"
+        echo -e "  ${DIM}Regenerate if you've added new project folders${NC}"
+        echo -e "\n  ${CYAN}[S]${NC} Skip, use existing epic.csv ${DIM}(recommended)${NC}"
+        echo -e "  ${CYAN}[R]${NC} Regenerate from project folders"
+        echo ""
+        read -p "  Your choice [S/r]: " REGEN_CHOICE
+        REGEN_CHOICE=${REGEN_CHOICE:-S}
+
+        if [[ "$REGEN_CHOICE" =~ ^[Rr]$ ]]; then
+            echo ""
+            echo -e "  ${CYAN}Regenerating epic.csv from project folders...${NC}"
+            python scripts/extract_epic_info.py
+            if [ $? -eq 0 ]; then
+                echo -e "  ${GREEN}✓ epic.csv regenerated successfully${NC}"
+            else
+                echo -e "  ${RED}✗ Failed to regenerate epic.csv${NC}"
+                cd "$SCRIPT_DIR"
+                return 1
+            fi
+        else
+            echo ""
+            echo -e "  ${GREEN}✓ Using existing epic.csv${NC}"
+        fi
+    fi
+
+    cd "$SCRIPT_DIR"
 }
 
 # Function to check data files
@@ -320,6 +410,7 @@ start_backend() {
     check_env_files || return 1
     check_venv || return 1
     check_ollama || return 1
+    generate_epic_csv || return 1  # Generate epic.csv from project folders
     check_data_files  # Non-blocking - just warns about missing files
     check_chromadb || return 1
 
