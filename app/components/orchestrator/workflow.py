@@ -36,19 +36,37 @@ async def auto_select_node(state: ImpactAssessmentState) -> dict:
     from app.services.project_indexer import ProjectMetadata
     from app.rag.hybrid_search import HybridSearchService
 
-    # If matches are already selected, use them; otherwise auto-select top 3
-    selected_matches = state.get("selected_matches")
-    if not selected_matches:
-        all_matches = state.get("all_matches", [])
+    all_matches = state.get("all_matches", [])
+    pre_selected = state.get("selected_matches", [])
+
+    # Handle different formats of selected_matches:
+    # - Empty list: auto-select top 3 from all_matches
+    # - List of strings (IDs): look up full match objects from all_matches
+    # - List of dicts: use directly
+    if not pre_selected:
+        # Auto-select top 3 by score
         if not all_matches:
             return {
                 "status": "error",
                 "error_message": "No matches found for auto-selection",
                 "current_agent": "error_handler",
             }
-        # Sort by match_score (descending) and take top 3
         sorted_matches = sorted(all_matches, key=lambda m: m.get("match_score", 0), reverse=True)
         selected_matches = sorted_matches[:3]
+    elif pre_selected and isinstance(pre_selected[0], str):
+        # Frontend sent string IDs - look up full match objects from all_matches
+        selected_ids = set(pre_selected)
+        selected_matches = [
+            m for m in all_matches
+            if m.get("match_id") in selected_ids or m.get("epic_id") in selected_ids
+        ]
+        # If no matches found by ID lookup, fall back to auto-select
+        if not selected_matches:
+            sorted_matches = sorted(all_matches, key=lambda m: m.get("match_score", 0), reverse=True)
+            selected_matches = sorted_matches[:3]
+    else:
+        # Already have full match dictionaries
+        selected_matches = pre_selected
 
     # Extract project IDs from selected matches
     project_ids = [m.get("epic_id") for m in selected_matches]

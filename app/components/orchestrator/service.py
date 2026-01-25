@@ -1,4 +1,4 @@
-from typing import Dict, Any, AsyncGenerator, Literal
+from typing import Dict, Any, AsyncGenerator, Literal, Union
 from datetime import datetime
 import json
 from pydantic import BaseModel
@@ -46,7 +46,9 @@ class PipelineRequest(BaseModel):
     session_id: str
     requirement_text: str
     jira_epic_id: str | None = None
-    selected_matches: list[Dict] = []
+    # Accept either string IDs or full match dictionaries
+    # Frontend sends string IDs; auto_select_node converts to dicts using all_matches
+    selected_matches: list[Union[str, Dict]] = []
 
 
 class PipelineResponse(BaseModel):

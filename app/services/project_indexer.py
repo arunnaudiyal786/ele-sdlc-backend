@@ -163,22 +163,30 @@ class ProjectIndexer:
 
     def _extract_project_id(self, folder_name: str) -> str:
         """
-        Extract project ID from folder name (everything before first hyphen)
+        Extract project ID from folder name (PRJ-XXXXX pattern)
 
-
+        Examples:
+            PRJ-10051-inventory-sync-automation → PRJ-10051
+            PRJ-10052-order-fulfillment-optimization → PRJ-10052
 
         Args:
             folder_name: Name of project folder
 
         Returns:
-            Project ID (everything before first hyphen)
+            Project ID in format PRJ-XXXXX
         """
-        # Extract everything before the first hyphen
-        if "-" in folder_name:
-            return folder_name.split("-")[0]
+        # Match PRJ-XXXXX pattern at the start of folder name
+        match = re.match(r"^(PRJ-\d+)", folder_name)
+        if match:
+            return match.group(1)
 
-        # No hyphen found - use entire folder name
-        logger.warning(f"No hyphen found in folder name '{folder_name}', using entire name as project ID")
+        # Fallback: try to get first two parts (PREFIX-NUMBER)
+        parts = folder_name.split("-")
+        if len(parts) >= 2 and parts[1].isdigit():
+            return f"{parts[0]}-{parts[1]}"
+
+        # Last resort: use entire folder name
+        logger.warning(f"Could not extract project ID from '{folder_name}', using entire name")
         return folder_name
 
     def _extract_project_name(self, doc: Document, folder_name: str) -> str:
