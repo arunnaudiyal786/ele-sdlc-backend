@@ -53,6 +53,10 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
                 impacted_modules_output=request.impacted_modules_output,
             )
 
+            # Save the raw estimation sheet data from parser output for audit trail
+            audit = AuditTrailManager(request.session_id)
+            self._save_estimation_sheet_data(audit, loaded_docs, context)
+
             # Format the filtered context for LLM prompt
             formatted_context = self._format_estimation_context(context)
         else:
@@ -105,6 +109,59 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         for m in modules_output.get("technical_modules", [])[:5]:
             lines.append(f"- {m.get('name')} ({m.get('impact')})")
         return "\n".join(lines) if lines else "No modules identified."
+
+    def _save_estimation_sheet_data(
+        self,
+        audit: AuditTrailManager,
+        loaded_docs: Dict[str, ProjectDocuments],
+        context: Dict[str, Any],
+    ) -> None:
+        """Save the raw estimation sheet data from parser output for audit trail.
+
+        Saves two files:
+        1. estimation_sheet_raw.json - Complete parsed estimation documents from each project
+        2. estimation_context.json - Filtered context assembled for the agent
+
+        Args:
+            audit: AuditTrailManager instance
+            loaded_docs: Dict of project_id → ProjectDocuments with parsed estimation data
+            context: Assembled context dict for the estimation effort agent
+        """
+        subfolder = "step3_agents/agent_estimation_effort"
+
+        # Save raw estimation sheet data from parser output
+        # This contains the complete parsed estimation.xlsx content for each project
+        raw_estimation_data = {}
+        for project_id, docs in loaded_docs.items():
+            raw_estimation_data[project_id] = {
+                "project_id": project_id,
+                "project_name": docs.tdd.project_name,
+                "epic_description": docs.tdd.epic_description,
+                "estimation_sheet": {
+                    "total_dev_points": docs.estimation.total_dev_points,
+                    "total_qa_points": docs.estimation.total_qa_points,
+                    "task_breakdown": [t.model_dump() for t in docs.estimation.task_breakdown],
+                    "assumptions_and_risks": docs.estimation.assumptions_and_risks,
+                    "sizing_guidelines": docs.estimation.sizing_guidelines,
+                    "budget_summary": docs.estimation.budget_summary,
+                    "estimate_summary": docs.estimation.estimate_summary,
+                    # Include all sheets for complete visibility
+                    "all_sheets": docs.estimation.all_sheets,
+                },
+            }
+
+        audit.save_json(
+            "estimation_sheet_raw.json",
+            raw_estimation_data,
+            subfolder=subfolder,
+        )
+
+        # Save the assembled context (filtered for estimation effort agent)
+        audit.save_json(
+            "estimation_context.json",
+            context,
+            subfolder=subfolder,
+        )
 
     def _format_matches(self, matches: List[Dict]) -> str:
         """Format matches for prompt (legacy fallback)."""
