@@ -18,11 +18,17 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
-    ollama_gen_model: str = "phi3:mini"
+    ollama_gen_model: str = "llama3.1:latest"
     ollama_embed_model: str = "all-minilm"
     ollama_timeout_seconds: int = 120
     ollama_temperature: float = 0.3
-    ollama_max_tokens: int = 2048
+    ollama_max_tokens: int = 4096
+
+    # Prompt Management (context allocation ratios)
+    prompt_system_ratio: float = 0.20      # 20% for system prompt
+    prompt_requirement_ratio: float = 0.40  # 40% for current requirement
+    prompt_historical_ratio: float = 0.40   # 40% for historical context
+    prompt_output_reserve: float = 0.15     # Reserve 15% for output generation
 
     # ChromaDB
     chroma_persist_dir: str = "./data/chroma"

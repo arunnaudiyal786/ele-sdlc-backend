@@ -105,12 +105,12 @@ fi
 
 # Check generation model
 echo -e "      ${ARROW} Checking generation model..."
-if ! echo "$MODELS" | grep -q "phi3:mini"; then
-    echo -e "      ${WARN} Pulling ${CYAN}phi3:mini${NC} ${DIM}(~2GB, for text generation)${NC}"
-    ollama pull phi3:mini
+if ! echo "$MODELS" | grep -q "llama3.1"; then
+    echo -e "      ${WARN} Pulling ${CYAN}llama3.1:latest${NC} ${DIM}(~4.7GB, for text generation)${NC}"
+    ollama pull llama3.1:latest
     echo -e "      ${CHECK} Generation model ready"
 else
-    echo -e "      ${CHECK} ${CYAN}phi3:mini${NC} ${DIM}(generation)${NC} available"
+    echo -e "      ${CHECK} ${CYAN}llama3.1${NC} ${DIM}(generation)${NC} available"
 fi
 echo ""
 

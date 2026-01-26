@@ -81,6 +81,9 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
     def _format_historical_tdds(self, loaded_projects: Dict) -> str:
         """Extract and format historical TDDs from loaded project documents.
 
+        Uses full_text extraction from TDD documents to provide complete
+        reference content for generating new TDDs.
+
         Args:
             loaded_projects: Dict mapping project_id -> ProjectDocuments (as dict)
 
@@ -99,48 +102,20 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
             if not tdd_data:
                 continue
 
+            # Get full text - this is the complete TDD document content
+            full_text = tdd_data.get("full_text", "")
+            file_name = tdd_data.get("file_name", "TDD.docx")
+
+            if not full_text:
+                continue
+
             all_tdds.append(f"\n{'='*60}")
             all_tdds.append(f"PROJECT: {project_id}")
+            all_tdds.append(f"TDD Document: {file_name}")
             all_tdds.append(f"{'='*60}")
+            all_tdds.append(full_text)
 
-            # Epic description / Purpose
-            epic_desc = tdd_data.get("epic_description", "")
-            if epic_desc:
-                all_tdds.append(f"\n## Purpose:\n{epic_desc[:500]}")
-
-            # Design overview
-            design_overview = tdd_data.get("design_overview", "")
-            if design_overview:
-                all_tdds.append(f"\n## Design Overview:\n{design_overview[:500]}")
-
-            # Design decisions
-            design_decisions = tdd_data.get("design_decisions", "")
-            if design_decisions:
-                all_tdds.append(f"\n## Key Design Decisions:\n{design_decisions[:400]}")
-
-            # Design patterns
-            patterns = tdd_data.get("design_patterns", [])
-            if patterns:
-                patterns_str = ", ".join(patterns[:5]) if isinstance(patterns, list) else str(patterns)
-                all_tdds.append(f"\n## Design Patterns:\n{patterns_str}")
-
-            # Module list (summarized)
-            modules = tdd_data.get("module_list", [])
-            if modules:
-                all_tdds.append("\n## Modules:")
-                for m in modules[:5]:
-                    if isinstance(m, dict):
-                        name = m.get("component_name", "Unknown")
-                        comp_type = m.get("component_type", "")
-                        desc = m.get("description", "")[:80]
-                        all_tdds.append(f"  - {name} ({comp_type}): {desc}")
-
-            # Interaction flow (summarized)
-            interaction = tdd_data.get("interaction_flow", "")
-            if interaction:
-                all_tdds.append(f"\n## Interaction Flow:\n{interaction[:300]}")
-
-        if len(all_tdds) <= 1:
+        if not all_tdds:
             return "No reference TDDs available."
 
         return "\n".join(all_tdds)

@@ -14,11 +14,18 @@ server:
 
 ollama:
   base_url: http://localhost:11434
-  generation_model: phi3:mini
+  generation_model: llama3.1:latest
   embedding_model: all-minilm
   timeout_seconds: 120
   temperature: 0.3
-  max_tokens: 2048
+  max_tokens: 4096
+
+# Prompt Management (context allocation ratios)
+prompt_management:
+  system_ratio: 0.20        # 20% for system prompt
+  requirement_ratio: 0.40   # 40% for current requirement
+  historical_ratio: 0.40    # 40% for historical context
+  output_reserve: 0.15      # Reserve 15% for output generation
 
 chromadb:
   persist_dir: ./data/chroma
