@@ -124,6 +124,9 @@ check_venv() {
     echo -e "${GREEN}✓ Python dependencies ready${NC}"
 }
 
+# Required models for this application
+REQUIRED_MODELS=("llama3.1:latest" "all-minilm")
+
 # Function to check and start Ollama
 check_ollama() {
     echo -e "\n${YELLOW}▶ Checking Ollama...${NC}"
@@ -151,16 +154,75 @@ check_ollama() {
     # Check for required models
     MODELS=$(curl -s http://localhost:11434/api/tags 2>/dev/null || echo '{"models":[]}')
 
+    # Pull required models if missing
     if ! echo "$MODELS" | grep -q "all-minilm"; then
         echo -e "  ${YELLOW}Pulling all-minilm model (embeddings)...${NC}"
         ollama pull all-minilm
     fi
 
-    if ! echo "$MODELS" | grep -q "phi3:mini"; then
-        echo -e "  ${YELLOW}Pulling phi3:mini model (generation)...${NC}"
-        ollama pull phi3:mini
+    if ! echo "$MODELS" | grep -q "llama3.1"; then
+        echo -e "  ${YELLOW}Pulling llama3.1:latest model (generation)...${NC}"
+        ollama pull llama3.1:latest
     fi
     echo -e "${GREEN}✓ Required models available${NC}"
+
+    # Clean up unused models (keep only required models)
+    cleanup_ollama_models
+}
+
+# Function to clean up unused Ollama models
+cleanup_ollama_models() {
+    echo -e "  ${CYAN}Checking for unused models...${NC}"
+
+    # Get list of all installed models
+    INSTALLED_MODELS=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}')
+
+    if [ -z "$INSTALLED_MODELS" ]; then
+        return 0
+    fi
+
+    MODELS_TO_REMOVE=""
+    while IFS= read -r model; do
+        # Skip empty lines
+        [ -z "$model" ] && continue
+
+        # Check if this model is required
+        IS_REQUIRED=false
+        for required in "${REQUIRED_MODELS[@]}"; do
+            # Match model name (with or without tag)
+            if [[ "$model" == "$required" ]] || [[ "$model" == "${required%:*}"* && "$required" == *":latest" ]]; then
+                IS_REQUIRED=true
+                break
+            fi
+            # Also check base name for embedding model
+            if [[ "$model" == "all-minilm"* ]]; then
+                IS_REQUIRED=true
+                break
+            fi
+            # Check for llama3.1 variants
+            if [[ "$model" == "llama3.1"* ]]; then
+                IS_REQUIRED=true
+                break
+            fi
+        done
+
+        if [ "$IS_REQUIRED" = false ]; then
+            MODELS_TO_REMOVE="$MODELS_TO_REMOVE $model"
+        fi
+    done <<< "$INSTALLED_MODELS"
+
+    # Remove unused models if any
+    if [ -n "$MODELS_TO_REMOVE" ]; then
+        echo -e "  ${YELLOW}Found unused models:${NC}$MODELS_TO_REMOVE"
+        echo -e "  ${CYAN}Removing unused models to free up disk space...${NC}"
+        for model in $MODELS_TO_REMOVE; do
+            echo -e "    ${DIM}Removing: $model${NC}"
+            ollama rm "$model" 2>/dev/null || true
+        done
+        echo -e "  ${GREEN}✓ Unused models cleaned up${NC}"
+    else
+        echo -e "  ${GREEN}✓ No unused models found${NC}"
+    fi
 }
 
 # Function to generate epic.csv from project folders
@@ -377,8 +439,9 @@ check_chromadb() {
 
         if [[ "$REBUILD_CHOICE" =~ ^[Rr]$ ]]; then
             echo ""
-            echo -e "  ${CYAN}Deleting existing collections...${NC}"
-            python scripts/reindex.py
+            echo -e "  ${CYAN}Removing existing ChromaDB data directory...${NC}"
+            rm -rf "./data/chroma"
+            echo -e "  ${GREEN}✓ ChromaDB data directory cleared${NC}"
             echo ""
             echo -e "  ${CYAN}Rebuilding vector database...${NC}"
             python scripts/init_vector_db.py

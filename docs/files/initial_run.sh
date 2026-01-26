@@ -211,14 +211,14 @@ else
     echo -e "      ${CHECK} ${CYAN}all-minilm${NC} ${DIM}(embeddings)${NC} already available"
 fi
 
-# Generation model (phi3:mini)
-if ! echo "$MODELS" | grep -q "phi3:mini"; then
-    echo -e "      ${WARN} Pulling ${CYAN}phi3:mini${NC} ${DIM}(~2GB, for generation)${NC}"
-    echo -e "      ${DIM}This may take a few minutes...${NC}"
-    ollama pull phi3:mini
+# Generation model (llama3.1)
+if ! echo "$MODELS" | grep -q "llama3.1"; then
+    echo -e "      ${WARN} Pulling ${CYAN}llama3.1:latest${NC} ${DIM}(~4.7GB, for generation)${NC}"
+    echo -e "      ${DIM}This may take several minutes...${NC}"
+    ollama pull llama3.1:latest
     echo -e "      ${CHECK} Generation model ready"
 else
-    echo -e "      ${CHECK} ${CYAN}phi3:mini${NC} ${DIM}(generation)${NC} already available"
+    echo -e "      ${CHECK} ${CYAN}llama3.1${NC} ${DIM}(generation)${NC} already available"
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -294,49 +294,62 @@ BACKEND_ENV_EXAMPLE="$SCRIPT_DIR/ele-sdlc-backend/.env.example"
 
 if [ -f "$BACKEND_ENV" ]; then
     echo -e "      ${CHECK} .env file already exists"
-    echo -e "      ${WARN} If you need to reconfigure, edit: ${CYAN}ele-sdlc-backend/.env${NC}"
+    echo -e "      ${DIM}To reconfigure, edit: ${CYAN}ele-sdlc-backend/.env${NC}"
 else
     if [ -f "$BACKEND_ENV_EXAMPLE" ]; then
         echo -e "      ${ARROW} Creating .env file from template..."
         cp "$BACKEND_ENV_EXAMPLE" "$BACKEND_ENV"
-        echo -e "      ${CHECK} .env file created"
+        echo -e "      ${CHECK} .env file created from .env.example"
         echo ""
-        echo -e "      ${BOLD}${YELLOW}ACTION REQUIRED:${NC}"
-        echo -e "      The backend uses OpenAI API for some features."
-        echo -e "      Please edit ${CYAN}ele-sdlc-backend/.env${NC} and set:"
-        echo -e "      ${DIM}- OPENAI_API_KEY (get from https://platform.openai.com/api-keys)${NC}"
+        echo -e "      ${DIM}Configuration summary:${NC}"
+        echo -e "      ${DIM}- Generation model: llama3.1:latest (local Ollama)${NC}"
+        echo -e "      ${DIM}- Embedding model: all-minilm (local Ollama)${NC}"
+        echo -e "      ${DIM}- Context allocation: 40% requirement, 40% historical, 20% system${NC}"
         echo ""
-        echo -e "      ${ARROW} Current configuration uses defaults:"
-        echo -e "      ${DIM}- CLASSIFICATION_MODEL=gpt-4o-mini${NC}"
-        echo -e "      ${DIM}- RESOLUTION_MODEL=gpt-4o${NC}"
-        echo -e "      ${DIM}- Ollama models for embeddings and generation${NC}"
-        echo ""
-        echo -e "${YELLOW}Press Enter after you've configured the .env file...${NC}"
-        read
+        echo -e "      ${DIM}To customize settings, edit: ${CYAN}ele-sdlc-backend/.env${NC}"
     else
         echo -e "      ${WARN} .env.example not found, creating default .env..."
         cat > "$BACKEND_ENV" << 'EOF'
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-key-here
+# Application
+APP_ENV=development
+DEBUG=true
 
-# Model Selection
-CLASSIFICATION_MODEL=gpt-4o-mini
-RESOLUTION_MODEL=gpt-4o
+# Ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_GEN_MODEL=llama3.1:latest
+OLLAMA_EMBED_MODEL=all-minilm
+OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_TEMPERATURE=0.3
+OLLAMA_MAX_TOKENS=4096
 
-# Thresholds
-CLASSIFICATION_CONFIDENCE_THRESHOLD=0.7
-LABEL_CONFIDENCE_THRESHOLD=0.7
-TOP_K_SIMILAR_TICKETS=20
+# Debug: Set to true to disable JSON repair and see raw LLM output
+JSON_REPAIR_DISABLED=false
 
-# Server Configuration
-API_HOST=localhost
-API_PORT=8000
+# Prompt Management (context allocation ratios)
+PROMPT_SYSTEM_RATIO=0.20
+PROMPT_REQUIREMENT_RATIO=0.40
+PROMPT_HISTORICAL_RATIO=0.40
+PROMPT_OUTPUT_RESERVE=0.15
+
+# ChromaDB
+CHROMA_PERSIST_DIR=./data/chroma
+
+# Search Weights
+SEARCH_SEMANTIC_WEIGHT=0.70
+SEARCH_KEYWORD_WEIGHT=0.30
+SEARCH_MAX_RESULTS=10
+
+# Paths
+DATA_RAW_PATH=./data/raw
+DATA_UPLOADS_PATH=./data/uploads
+DATA_SESSIONS_PATH=./sessions
+
+# Server
+HOST=0.0.0.0
+PORT=8000
+CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
 EOF
         echo -e "      ${CHECK} Default .env created"
-        echo -e "      ${WARN} Please edit ${CYAN}ele-sdlc-backend/.env${NC} and configure OPENAI_API_KEY"
-        echo ""
-        echo -e "${YELLOW}Press Enter after you've configured the .env file...${NC}"
-        read
     fi
 fi
 
@@ -427,7 +440,7 @@ echo -e "${GREEN}║${NC}  ${BOLD}${GREEN}Setup Complete!${NC}                  
 echo -e "${GREEN}╠════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║${NC}                                                            ${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${BOLD}What was installed:${NC}                                       ${GREEN}║${NC}"
-echo -e "${GREEN}║${NC}  ${CHECK} Ollama with all-minilm and phi3:mini models          ${GREEN}║${NC}"
+echo -e "${GREEN}║${NC}  ${CHECK} Ollama with all-minilm and llama3.1 models           ${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${CHECK} Python virtual environment with dependencies          ${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${CHECK} Backend environment configuration (.env)              ${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${CHECK} Frontend Node.js dependencies                         ${GREEN}║${NC}"
