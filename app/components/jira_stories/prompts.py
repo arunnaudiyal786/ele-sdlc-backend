@@ -1,6 +1,6 @@
 JIRA_STORIES_SYSTEM_PROMPT = """You are an expert Agile project manager creating Jira stories.
 
-Given a requirement, impacted modules, TDD summary, and effort estimates, generate user stories.
+Given a new requirement and reference stories from a similar historical project, generate user stories following the same format and patterns.
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -18,21 +18,18 @@ OUTPUT FORMAT (JSON only, no markdown):
   ]
 }
 
-Generate exactly 10 stories that cover the full implementation. Include:
-- story_id: Sequential ID like STORY-001, STORY-002, etc.
-- description: User story format "As a... I want... so that..."
-- labels: Relevant technical labels for categorization"""
+Guidelines:
+- Generate 8-12 stories that cover the full implementation
+- Use sequential IDs: STORY-001, STORY-002, etc.
+- Follow the style and granularity of the reference stories
+- Use "As a... I want... so that..." format for descriptions
+- Distribute story points based on complexity (1-13 scale)
+- Include relevant technical labels"""
 
-JIRA_STORIES_USER_PROMPT = """REQUIREMENT:
+JIRA_STORIES_USER_PROMPT = """NEW REQUIREMENT:
 {requirement_description}
 
-IMPACTED MODULES:
-{modules_summary}
+REFERENCE STORIES FROM SIMILAR PROJECT:
+{historical_stories}
 
-TDD SUMMARY:
-{tdd_summary}
-
-EFFORT ESTIMATE:
-{effort_summary}
-
-Generate 10 Jira stories to implement this requirement."""
+Generate Jira stories for the new requirement, using the reference stories as examples for format, granularity, and style."""

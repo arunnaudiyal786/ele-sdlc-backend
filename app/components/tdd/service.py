@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
@@ -22,15 +22,12 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
 
     async def process(self, request: TDDRequest) -> TDDResponse:
         """Generate TDD document using LLM."""
-        modules_summary = self._format_modules(request.impacted_modules_output)
-        effort_summary = self._format_effort(request.estimation_effort_output)
-        historical_matches = self._format_matches(request.selected_matches)
+        # Extract historical TDDs from selected project(s)
+        historical_tdds = self._format_historical_tdds(request.loaded_projects)
 
         user_prompt = TDD_USER_PROMPT.format(
             requirement_description=request.requirement_text,
-            modules_summary=modules_summary,
-            effort_summary=effort_summary,
-            historical_matches=historical_matches,
+            historical_tdds=historical_tdds,
         )
 
         audit = AuditTrailManager(request.session_id)
@@ -81,30 +78,72 @@ class TDDService(BaseComponent[TDDRequest, TDDResponse]):
 
         return response
 
-    def _format_modules(self, modules_output: Dict) -> str:
-        """Format modules for prompt."""
-        lines = []
-        for m in modules_output.get("functional_modules", [])[:5]:
-            lines.append(f"- {m.get('name')} ({m.get('impact')}): {m.get('reason', '')[:100]}")
-        for m in modules_output.get("technical_modules", [])[:5]:
-            lines.append(f"- {m.get('name')} ({m.get('impact')}): {m.get('reason', '')[:100]}")
-        return "\n".join(lines) if lines else "No modules identified."
+    def _format_historical_tdds(self, loaded_projects: Dict) -> str:
+        """Extract and format historical TDDs from loaded project documents.
 
-    def _format_effort(self, effort_output: Dict) -> str:
-        """Format effort for prompt."""
-        return (
-            f"Dev Hours: {effort_output.get('total_dev_hours', 0)}, "
-            f"QA Hours: {effort_output.get('total_qa_hours', 0)}, "
-            f"Story Points: {effort_output.get('story_points', 0)}, "
-            f"Confidence: {effort_output.get('confidence', 'N/A')}"
-        )
+        Args:
+            loaded_projects: Dict mapping project_id -> ProjectDocuments (as dict)
 
-    def _format_matches(self, matches: List[Dict]) -> str:
-        """Format historical matches for prompt."""
-        lines = []
-        for m in matches[:3]:
-            lines.append(f"- {m.get('epic_name', 'Unknown')}: {m.get('description', '')[:150]}")
-        return "\n".join(lines) if lines else "No historical matches."
+        Returns:
+            Formatted string of historical TDD content for use in prompt
+        """
+        if not loaded_projects:
+            return "No reference TDDs available."
+
+        all_tdds = []
+
+        for project_id, project_data in loaded_projects.items():
+            # Extract TDD from project data
+            tdd_data = project_data.get("tdd", {})
+
+            if not tdd_data:
+                continue
+
+            all_tdds.append(f"\n{'='*60}")
+            all_tdds.append(f"PROJECT: {project_id}")
+            all_tdds.append(f"{'='*60}")
+
+            # Epic description / Purpose
+            epic_desc = tdd_data.get("epic_description", "")
+            if epic_desc:
+                all_tdds.append(f"\n## Purpose:\n{epic_desc[:500]}")
+
+            # Design overview
+            design_overview = tdd_data.get("design_overview", "")
+            if design_overview:
+                all_tdds.append(f"\n## Design Overview:\n{design_overview[:500]}")
+
+            # Design decisions
+            design_decisions = tdd_data.get("design_decisions", "")
+            if design_decisions:
+                all_tdds.append(f"\n## Key Design Decisions:\n{design_decisions[:400]}")
+
+            # Design patterns
+            patterns = tdd_data.get("design_patterns", [])
+            if patterns:
+                patterns_str = ", ".join(patterns[:5]) if isinstance(patterns, list) else str(patterns)
+                all_tdds.append(f"\n## Design Patterns:\n{patterns_str}")
+
+            # Module list (summarized)
+            modules = tdd_data.get("module_list", [])
+            if modules:
+                all_tdds.append("\n## Modules:")
+                for m in modules[:5]:
+                    if isinstance(m, dict):
+                        name = m.get("component_name", "Unknown")
+                        comp_type = m.get("component_type", "")
+                        desc = m.get("description", "")[:80]
+                        all_tdds.append(f"  - {name} ({comp_type}): {desc}")
+
+            # Interaction flow (summarized)
+            interaction = tdd_data.get("interaction_flow", "")
+            if interaction:
+                all_tdds.append(f"\n## Interaction Flow:\n{interaction[:300]}")
+
+        if len(all_tdds) <= 1:
+            return "No reference TDDs available."
+
+        return "\n".join(all_tdds)
 
     def _generate_markdown(
         self,

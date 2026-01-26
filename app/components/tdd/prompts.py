@@ -1,6 +1,6 @@
 TDD_SYSTEM_PROMPT = """You are an expert software architect creating Technical Design Documents (TDDs).
 
-Given a requirement, impacted modules, and effort estimates, generate a comprehensive TDD.
+Given a new requirement and reference TDDs from similar historical projects, generate a comprehensive TDD following the same format and level of detail.
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -14,21 +14,19 @@ OUTPUT FORMAT (JSON only, no markdown):
   "tdd_dependencies": ["string array - dependent services or systems"]
 }
 
-Be thorough and specific to the requirement. Include concrete implementation details."""
+Guidelines:
+- Follow the structure and detail level of the reference TDDs
+- Be specific to the new requirement's context
+- Include concrete implementation details
+- Reference similar patterns from historical projects where applicable"""
 
-TDD_USER_PROMPT = """REQUIREMENT:
+TDD_USER_PROMPT = """NEW REQUIREMENT:
 {requirement_description}
 
-IMPACTED MODULES:
-{modules_summary}
+REFERENCE TDDs FROM SIMILAR PROJECTS:
+{historical_tdds}
 
-EFFORT ESTIMATE:
-{effort_summary}
-
-SIMILAR HISTORICAL PROJECTS:
-{historical_matches}
-
-Generate a comprehensive Technical Design Document for this requirement."""
+Generate a comprehensive Technical Design Document for the new requirement, using the reference TDDs as examples for structure, patterns, and level of detail."""
 
 TDD_MARKDOWN_TEMPLATE = """# {tdd_name}
 

@@ -37,6 +37,7 @@ class TaskEstimate(BaseModel):
     task_description: str = Field(..., description="Task description")
     dev_points: float = Field(0.0, description="Development effort in points")
     qa_points: float = Field(0.0, description="QA effort in points")
+    total_points: float = Field(0.0, description="Total effort in points (when no DEV/QA split)")
     notes: Optional[str] = Field(None, description="Additional notes")
     module_affected: Optional[str] = Field(None, description="Module/component name")
 
@@ -47,6 +48,7 @@ class EstimationDocument(BaseModel):
     project_id: str = Field(..., description="Project ID")
     total_dev_points: float = Field(0.0, description="Total development points")
     total_qa_points: float = Field(0.0, description="Total QA points")
+    total_points: float = Field(0.0, description="Total effort points (when no DEV/QA split)")
     task_breakdown: List[TaskEstimate] = Field(default_factory=list, description="Individual task estimates")
     estimate_summary: Dict[str, Any] = Field(default_factory=dict, description="Summary data")
     assumptions_and_risks: List[str] = Field(default_factory=list, description="Assumptions and risks")
@@ -63,6 +65,14 @@ class EstimationParser:
     async def parse(self, estimation_path: Path) -> EstimationDocument:
         """
         Parse estimation Excel file
+
+        Supports two formats:
+        1. NEW FORMAT: Single "Scope Estimation" sheet with two columns:
+           - "Scope Item" (multi-line description)
+           - "Effort in Points" (single effort value)
+
+        2. LEGACY FORMAT: Multiple sheets (Task Breakdown, Dev Estimate, QA Estimate, etc.)
+           with separate dev_points/qa_points columns
 
         Args:
             estimation_path: Path to estimation.xlsx file
@@ -86,8 +96,133 @@ class EstimationParser:
         # Extract project ID
         project_id = self._extract_project_id(estimation_path)
 
-        # Parse key sheets
-        task_breakdown = []
+        # Detect format: Check for new "Scope Estimation" format first
+        scope_sheet = self._find_sheet(xl.sheet_names, ["scope estimation", "scope"])
+        if scope_sheet:
+            logger.info(f"Detected NEW format: parsing 'Scope Estimation' sheet")
+            return await self._parse_new_format(estimation_path, xl, project_id, scope_sheet)
+
+        # Fall back to legacy format
+        logger.info("Detected LEGACY format: parsing multiple sheets")
+        return await self._parse_legacy_format(estimation_path, xl, project_id)
+
+    async def _parse_new_format(
+        self,
+        estimation_path: Path,
+        xl: pd.ExcelFile,
+        project_id: str,
+        scope_sheet: str,
+    ) -> EstimationDocument:
+        """
+        Parse NEW format: Single "Scope Estimation" sheet with two columns.
+
+        Columns:
+        - "Scope Item": Multi-line task description (lines separated by \\n)
+        - "Effort in Points": Total effort as single number
+
+        Args:
+            estimation_path: Path to Excel file
+            xl: ExcelFile object
+            project_id: Extracted project ID
+            scope_sheet: Name of the scope estimation sheet
+
+        Returns:
+            EstimationDocument with parsed data
+        """
+        df = pd.read_excel(estimation_path, sheet_name=scope_sheet)
+        logger.info(f"Parsing scope sheet with columns: {list(df.columns)}")
+
+        # Normalize column names
+        col_mapping = {}
+        for col in df.columns:
+            col_lower = str(col).lower().strip()
+            if "scope" in col_lower or "item" in col_lower:
+                col_mapping[col] = "scope_item"
+            elif "effort" in col_lower or "point" in col_lower:
+                col_mapping[col] = "effort_points"
+
+        df = df.rename(columns=col_mapping)
+        logger.info(f"Normalized columns: {col_mapping}")
+
+        tasks: List[TaskEstimate] = []
+        total_points = 0.0
+
+        for _, row in df.iterrows():
+            scope_item = row.get("scope_item", "")
+            effort = row.get("effort_points", 0)
+
+            # Skip empty rows
+            if pd.isna(scope_item) or str(scope_item).strip() == "":
+                continue
+
+            # Parse effort
+            try:
+                effort_value = float(effort) if pd.notna(effort) else 0.0
+            except (ValueError, TypeError):
+                effort_value = 0.0
+
+            total_points += effort_value
+
+            # Parse scope item - first line is typically the main task/module
+            scope_lines = str(scope_item).split("\n")
+            main_task = scope_lines[0].strip() if scope_lines else str(scope_item)
+            subtasks = [line.strip() for line in scope_lines[1:] if line.strip()]
+
+            # Create task with full description
+            task = TaskEstimate(
+                ticket_id=None,
+                task_description=main_task,
+                dev_points=0.0,  # No DEV/QA split in new format
+                qa_points=0.0,
+                total_points=effort_value,
+                notes="\n".join(subtasks) if subtasks else None,
+                module_affected=main_task.split()[0] if main_task else None,  # First word as module hint
+            )
+            tasks.append(task)
+
+        logger.info(f"Parsed {len(tasks)} scope items, Total Points: {total_points}")
+
+        # Load all sheets as JSON for LLM
+        all_sheets = self._load_all_sheets(estimation_path, xl)
+
+        return EstimationDocument(
+            project_id=project_id,
+            total_dev_points=0.0,  # No DEV/QA split
+            total_qa_points=0.0,
+            total_points=total_points,
+            task_breakdown=tasks,
+            estimate_summary={"format": "scope_estimation", "total_scope_items": len(tasks)},
+            assumptions_and_risks=[],
+            sizing_guidelines={},
+            budget_summary={},
+            all_sheets=all_sheets,
+        )
+
+    async def _parse_legacy_format(
+        self,
+        estimation_path: Path,
+        xl: pd.ExcelFile,
+        project_id: str,
+    ) -> EstimationDocument:
+        """
+        Parse LEGACY format: Multiple sheets with DEV/QA point separation.
+
+        Expected sheets:
+        - Task Breakdown: Individual tasks with dev_points, qa_points
+        - Dev Estimate: Development effort details
+        - QA Estimate: QA effort details
+        - Assumptions and Risks
+        - Sizing Guidelines
+
+        Args:
+            estimation_path: Path to Excel file
+            xl: ExcelFile object
+            project_id: Extracted project ID
+
+        Returns:
+            EstimationDocument with parsed data
+        """
+        task_breakdown: List[TaskEstimate] = []
         total_dev = 0.0
         total_qa = 0.0
 
@@ -117,7 +252,24 @@ class EstimationParser:
         sizing_guidelines = self._parse_sizing_guidelines(xl, estimation_path)
 
         # Load all sheets as JSON for LLM
-        all_sheets = {}
+        all_sheets = self._load_all_sheets(estimation_path, xl)
+
+        return EstimationDocument(
+            project_id=project_id,
+            total_dev_points=total_dev,
+            total_qa_points=total_qa,
+            total_points=total_dev + total_qa,
+            task_breakdown=task_breakdown,
+            estimate_summary={"format": "legacy", "total_tasks": len(task_breakdown)},
+            assumptions_and_risks=assumptions,
+            sizing_guidelines=sizing_guidelines,
+            budget_summary={},
+            all_sheets=all_sheets,
+        )
+
+    def _load_all_sheets(self, estimation_path: Path, xl: pd.ExcelFile) -> Dict[str, Any]:
+        """Load all sheets as JSON for LLM context."""
+        all_sheets: Dict[str, Any] = {}
         for sheet_name in xl.sheet_names:
             try:
                 df = pd.read_excel(estimation_path, sheet_name=sheet_name)
@@ -125,16 +277,7 @@ class EstimationParser:
                 all_sheets[sheet_name] = df.fillna("").to_dict(orient="records")
             except Exception as e:
                 logger.warning(f"Failed to parse sheet {sheet_name}: {e}")
-
-        return EstimationDocument(
-            project_id=project_id,
-            total_dev_points=total_dev,
-            total_qa_points=total_qa,
-            task_breakdown=task_breakdown,
-            assumptions_and_risks=assumptions,
-            sizing_guidelines=sizing_guidelines,
-            all_sheets=all_sheets,
-        )
+        return all_sheets
 
     def _extract_project_id(self, estimation_path: Path) -> str:
         """Extract project ID from file path"""
@@ -246,6 +389,7 @@ class EstimationParser:
                 task_description=str(row.get("task_description", "")),
                 dev_points=dev_points,
                 qa_points=qa_points,
+                total_points=dev_points + qa_points,
                 notes=str(row.get("notes", "")) if pd.notna(row.get("notes")) else None,
                 module_affected=str(row.get("module", "")) if pd.notna(row.get("module")) else None,
             )

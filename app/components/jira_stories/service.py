@@ -1,10 +1,6 @@
 import json
-import re
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from typing import Dict
 from app.components.base.component import BaseComponent
 from app.components.base.exceptions import ResponseParsingError
 from app.utils.ollama_client import get_ollama_client
@@ -41,15 +37,12 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
 
     async def process(self, request: JiraStoriesRequest) -> JiraStoriesResponse:
         """Generate Jira stories using LLM."""
-        modules_summary = self._format_modules(request.impacted_modules_output)
-        effort_summary = self._format_effort(request.estimation_effort_output)
-        tdd_summary = self._format_tdd(request.tdd_output)
+        # Extract historical stories from selected project(s)
+        historical_stories = self._format_historical_stories(request.loaded_projects)
 
         user_prompt = JIRA_STORIES_USER_PROMPT.format(
             requirement_description=request.requirement_text,
-            modules_summary=modules_summary,
-            tdd_summary=tdd_summary,
-            effort_summary=effort_summary,
+            historical_stories=historical_stories,
         )
 
         audit = AuditTrailManager(request.session_id)
@@ -82,24 +75,46 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
 
         return response
 
-    def _format_modules(self, modules_output: Dict) -> str:
-        """Format modules for prompt."""
-        lines = []
-        for m in modules_output.get("functional_modules", [])[:5]:
-            lines.append(f"- {m.get('name')}")
-        for m in modules_output.get("technical_modules", [])[:5]:
-            lines.append(f"- {m.get('name')}")
-        return "\n".join(lines) if lines else "No modules."
+    def _format_historical_stories(self, loaded_projects: Dict) -> str:
+        """Extract and format historical Jira stories from loaded project documents.
 
-    def _format_effort(self, effort_output: Dict) -> str:
-        """Format effort for prompt."""
-        return f"Dev: {effort_output.get('total_dev_hours', 0)}h, QA: {effort_output.get('total_qa_hours', 0)}h, Points: {effort_output.get('story_points', 0)}"
+        Args:
+            loaded_projects: Dict mapping project_id -> ProjectDocuments (as dict)
 
-    def _format_tdd(self, tdd_output: Dict) -> str:
-        """Format TDD for prompt."""
-        if not tdd_output:
-            return "No TDD available."
-        return f"Architecture: {tdd_output.get('architecture_pattern', 'N/A')}, Components: {', '.join(tdd_output.get('technical_components', [])[:5])}"
+        Returns:
+            Formatted string of historical stories for use in prompt
+        """
+        if not loaded_projects:
+            return "No reference stories available."
+
+        all_stories = []
+
+        for project_id, project_data in loaded_projects.items():
+            # Extract jira_stories from project data
+            jira_stories_data = project_data.get("jira_stories", {})
+            stories = jira_stories_data.get("stories", [])
+
+            if not stories:
+                continue
+
+            all_stories.append(f"\n--- Project: {project_id} ---")
+
+            # Format each story (limit to first 10 stories per project)
+            for i, story in enumerate(stories[:10], 1):
+                story_id = story.get("jira_id", f"STORY-{i:03d}")
+                description = story.get("description", "No description")
+                points = story.get("story_points", "N/A")
+                priority = story.get("priority", "MEDIUM")
+
+                all_stories.append(
+                    f"{story_id} | Points: {points} | Priority: {priority}\n"
+                    f"  {description}"
+                )
+
+        if not all_stories:
+            return "No reference stories available."
+
+        return "\n".join(all_stories)
 
     def _normalize_story(self, story: Dict) -> Dict:
         """Normalize story data from LLM to handle type variations.

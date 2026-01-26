@@ -217,6 +217,10 @@ class ContextAssembler:
         Needs: Task breakdowns, effort points, filtered impacted modules
         Source: Estimation document + impacted modules from analysis (not full TDD module list)
 
+        Supports two estimation formats:
+        1. NEW FORMAT: Single "Scope Estimation" sheet with total_points (no DEV/QA split)
+        2. LEGACY FORMAT: Separate dev_points/qa_points columns
+
         Args:
             docs: Project documents
             impacted_modules_output: Output from impacted_modules agent containing
@@ -231,14 +235,22 @@ class ContextAssembler:
             # Combine both types of impacted modules
             impacted_modules = functional + technical
 
-        return {
+        # Build context with full estimation data
+        context = {
             "epic_description": docs.tdd.epic_description,
             "total_dev_points": docs.estimation.total_dev_points,
             "total_qa_points": docs.estimation.total_qa_points,
+            "total_points": docs.estimation.total_points,  # Total effort (new format)
             "task_breakdown": [t.model_dump() for t in docs.estimation.task_breakdown],
             "impacted_modules": impacted_modules,  # Filtered modules, not full module_list
             "assumptions_and_risks": docs.estimation.assumptions_and_risks,
+            "estimate_summary": docs.estimation.estimate_summary,
+            "sizing_guidelines": docs.estimation.sizing_guidelines,
+            # Include all_sheets for complete visibility to LLM
+            "all_sheets": docs.estimation.all_sheets,
         }
+
+        return context
 
     def _context_for_tdd(self, docs: ProjectDocuments) -> Dict[str, Any]:
         """

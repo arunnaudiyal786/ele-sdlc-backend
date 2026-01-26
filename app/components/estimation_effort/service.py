@@ -178,6 +178,10 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         - Only impacted modules (not full TDD module_list)
         - Only estimation data from selected historical matches
 
+        Supports two estimation formats:
+        1. NEW FORMAT: Single "Scope Estimation" sheet with total_points (no DEV/QA split)
+        2. LEGACY FORMAT: Separate dev_points/qa_points columns
+
         Args:
             context: Context dict with structure:
                 {
@@ -188,11 +192,13 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
                             "project_name": str,
                             "relevant_data": {
                                 "epic_description": str,
-                                "impacted_modules": [...],  # Filtered modules only
+                                "impacted_modules": [...],
                                 "total_dev_points": float,
                                 "total_qa_points": float,
+                                "total_points": float,  # New format
                                 "task_breakdown": [...],
-                                "assumptions_and_risks": [...]
+                                "assumptions_and_risks": [...],
+                                "all_sheets": {...}  # Complete Excel data
                             }
                         }
                     ]
@@ -225,30 +231,66 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
                     mod_reason = mod.get("reason", "")[:150]  # Truncate long reasons
                     lines.append(f"  - {mod_name} ({mod_impact}): {mod_reason}")
 
-            # Historical estimation data
+            # Historical estimation data - handle both new and legacy formats
             total_dev = data.get("total_dev_points", 0)
             total_qa = data.get("total_qa_points", 0)
-            lines.append(f"\nHistorical Effort:")
-            lines.append(f"  - Dev Points: {total_dev}")
-            lines.append(f"  - QA Points: {total_qa}")
-            lines.append(f"  - Total: {total_dev + total_qa}")
+            total_points = data.get("total_points", 0)
 
-            # Task breakdown (show top 5 tasks as examples)
+            lines.append(f"\nHistorical Effort:")
+            if total_points > 0 and total_dev == 0 and total_qa == 0:
+                # New format: single total points (no DEV/QA split)
+                lines.append(f"  - Total Points: {total_points}")
+                lines.append("  - (Note: This project uses combined effort points, not split by DEV/QA)")
+            else:
+                # Legacy format: separate DEV/QA points
+                lines.append(f"  - Dev Points: {total_dev}")
+                lines.append(f"  - QA Points: {total_qa}")
+                lines.append(f"  - Total: {total_dev + total_qa}")
+
+            # Task/Scope breakdown - handle both formats
             task_breakdown = data.get("task_breakdown", [])
             if task_breakdown:
-                lines.append(f"\nKey Tasks (showing {min(5, len(task_breakdown))} of {len(task_breakdown)}):")
-                for task in task_breakdown[:5]:
-                    desc = task.get("task_description", "")[:100]  # Truncate long descriptions
+                lines.append(f"\nScope Items (showing {min(10, len(task_breakdown))} of {len(task_breakdown)}):")
+                for task in task_breakdown[:10]:
+                    desc = task.get("task_description", "")[:100]
+                    total_pts = task.get("total_points", 0)
                     dev = task.get("dev_points", 0)
                     qa = task.get("qa_points", 0)
-                    lines.append(f"  - {desc} (Dev: {dev}, QA: {qa})")
+                    notes = task.get("notes", "")
+
+                    if total_pts > 0 and dev == 0 and qa == 0:
+                        # New format
+                        lines.append(f"  - {desc}: {total_pts} points")
+                        if notes:
+                            # Include subtasks/notes (first 200 chars)
+                            lines.append(f"    Details: {notes[:200]}")
+                    else:
+                        # Legacy format
+                        lines.append(f"  - {desc} (Dev: {dev}, QA: {qa})")
 
             # Assumptions and risks (if available)
             assumptions = data.get("assumptions_and_risks", [])
             if assumptions:
                 lines.append(f"\nKey Assumptions/Risks (showing {min(3, len(assumptions))}):")
                 for assumption in assumptions[:3]:
-                    lines.append(f"  - {assumption[:150]}")  # Truncate long assumptions
+                    lines.append(f"  - {assumption[:150]}")
+
+            # Sizing guidelines (if available)
+            sizing = data.get("sizing_guidelines", {})
+            if sizing:
+                lines.append(f"\nSizing Guidelines:")
+                for key, value in list(sizing.items())[:5]:
+                    lines.append(f"  - {key}: {value}")
+
+            # Include raw sheet data for complete context
+            all_sheets = data.get("all_sheets", {})
+            if all_sheets:
+                lines.append(f"\nComplete Estimation Sheet Data:")
+                for sheet_name, records in all_sheets.items():
+                    lines.append(f"\n  Sheet: {sheet_name}")
+                    for i, record in enumerate(records[:10]):  # Limit to 10 rows per sheet
+                        record_str = " | ".join(f"{k}: {v}" for k, v in record.items() if v)
+                        lines.append(f"    Row {i+1}: {record_str[:200]}")
 
         return "\n".join(lines) if lines else "No estimation data available."
 
