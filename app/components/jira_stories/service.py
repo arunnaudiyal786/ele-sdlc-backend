@@ -78,6 +78,9 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
     def _format_historical_stories(self, loaded_projects: Dict) -> str:
         """Extract and format historical Jira stories from loaded project documents.
 
+        Uses generic full text extraction - the LLM reasons about the raw
+        text content without schema assumptions.
+
         Args:
             loaded_projects: Dict mapping project_id -> ProjectDocuments (as dict)
 
@@ -87,34 +90,26 @@ class JiraStoriesService(BaseComponent[JiraStoriesRequest, JiraStoriesResponse])
         if not loaded_projects:
             return "No reference stories available."
 
-        all_stories = []
+        all_content = []
 
         for project_id, project_data in loaded_projects.items():
-            # Extract jira_stories from project data
+            # Extract full text from jira_stories (generic extraction)
             jira_stories_data = project_data.get("jira_stories", {})
-            stories = jira_stories_data.get("stories", [])
+            full_text = jira_stories_data.get("full_text", "")
+            file_name = jira_stories_data.get("file_name", "jira_stories.xlsx")
 
-            if not stories:
+            if not full_text.strip():
                 continue
 
-            all_stories.append(f"\n--- Project: {project_id} ---")
+            all_content.append(f"\n--- Project: {project_id} ({file_name}) ---")
+            all_content.append("─" * 40)
+            all_content.append(full_text)
+            all_content.append("─" * 40)
 
-            # Format each story (limit to first 10 stories per project)
-            for i, story in enumerate(stories[:10], 1):
-                story_id = story.get("jira_id", f"STORY-{i:03d}")
-                description = story.get("description", "No description")
-                points = story.get("story_points", "N/A")
-                priority = story.get("priority", "MEDIUM")
-
-                all_stories.append(
-                    f"{story_id} | Points: {points} | Priority: {priority}\n"
-                    f"  {description}"
-                )
-
-        if not all_stories:
+        if not all_content:
             return "No reference stories available."
 
-        return "\n".join(all_stories)
+        return "\n".join(all_content)
 
     def _normalize_story(self, story: Dict) -> Dict:
         """Normalize story data from LLM to handle type variations.

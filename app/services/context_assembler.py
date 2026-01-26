@@ -182,7 +182,7 @@ class ContextAssembler:
             context["similar_projects"].append(
                 {
                     "project_id": project_id,
-                    "project_name": docs.tdd.project_name or project_id,
+                    "project_name": project_id,  # Generic extraction - no structured project_name
                     "relevant_data": relevant_data,
                 }
             )
@@ -194,16 +194,16 @@ class ContextAssembler:
         """
         Context for Impacted Modules Agent
 
-        Needs: Module information, interaction flows, design decisions, risks
-        Source: TDD document
+        Needs: TDD content for module analysis
+        Source: TDD document full text
         """
         return {
-            "epic_description": docs.tdd.epic_description,
-            "module_list": [m.model_dump() for m in docs.tdd.module_list],
-            "interaction_flow": docs.tdd.interaction_flow,
-            "design_decisions": docs.tdd.design_decisions,
-            "design_patterns": docs.tdd.design_patterns,
-            "risks": docs.tdd.risks,
+            # Generic extraction - full text from TDD document
+            "tdd_full_text": docs.tdd.full_text,
+            "tdd_file_name": docs.tdd.file_name,
+            "tdd_table_count": docs.tdd.table_count,
+            # Include tables separately for structured data
+            "tdd_tables": [t.model_dump() for t in docs.tdd.tables],
         }
 
     def _context_for_estimation_effort(
@@ -214,12 +214,8 @@ class ContextAssembler:
         """
         Context for Estimation Effort Agent
 
-        Needs: Task breakdowns, effort points, filtered impacted modules
-        Source: Estimation document + impacted modules from analysis (not full TDD module list)
-
-        Supports two estimation formats:
-        1. NEW FORMAT: Single "Scope Estimation" sheet with total_points (no DEV/QA split)
-        2. LEGACY FORMAT: Separate dev_points/qa_points columns
+        Needs: Historical estimation data + filtered impacted modules
+        Source: TDD full text + Estimation full text + impacted modules from analysis
 
         Args:
             docs: Project documents
@@ -227,61 +223,54 @@ class ContextAssembler:
                                     functional_modules and technical_modules lists
         """
         # Extract impacted modules from analysis output
-        # These are filtered modules relevant to the requirement, not full TDD module_list
         impacted_modules = []
         if impacted_modules_output:
             functional = impacted_modules_output.get("functional_modules", [])
             technical = impacted_modules_output.get("technical_modules", [])
-            # Combine both types of impacted modules
             impacted_modules = functional + technical
 
-        # Build context with full estimation data
-        context = {
-            "epic_description": docs.tdd.epic_description,
-            "total_dev_points": docs.estimation.total_dev_points,
-            "total_qa_points": docs.estimation.total_qa_points,
-            "total_points": docs.estimation.total_points,  # Total effort (new format)
-            "task_breakdown": [t.model_dump() for t in docs.estimation.task_breakdown],
-            "impacted_modules": impacted_modules,  # Filtered modules, not full module_list
-            "assumptions_and_risks": docs.estimation.assumptions_and_risks,
-            "estimate_summary": docs.estimation.estimate_summary,
-            "sizing_guidelines": docs.estimation.sizing_guidelines,
-            # Include all_sheets for complete visibility to LLM
-            "all_sheets": docs.estimation.all_sheets,
+        # Build context with generic full text extraction
+        return {
+            "impacted_modules": impacted_modules,
+            # Generic extraction - full text from TDD document
+            "tdd_full_text": docs.tdd.full_text,
+            "tdd_file_name": docs.tdd.file_name,
+            # Generic extraction - full text from estimation Excel
+            "estimation_full_text": docs.estimation.full_text,
+            "estimation_file_name": docs.estimation.file_name,
+            "estimation_sheet_count": docs.estimation.sheet_count,
         }
-
-        return context
 
     def _context_for_tdd(self, docs: ProjectDocuments) -> Dict[str, Any]:
         """
         Context for TDD Generation Agent
 
-        Needs: Design patterns, technical architecture, module designs
-        Source: Full TDD document
+        Needs: Reference TDD content for generating new TDD
+        Source: TDD document full text + tables
         """
         return {
-            "epic_description": docs.tdd.epic_description,
-            "scope": docs.tdd.scope,
-            "design_overview": docs.tdd.design_overview,
-            "design_patterns": docs.tdd.design_patterns,
-            "design_decisions": docs.tdd.design_decisions,
-            "module_list": [m.model_dump() for m in docs.tdd.module_list],
-            "module_designs": [m.model_dump() for m in docs.tdd.module_designs],
-            "interaction_flow": docs.tdd.interaction_flow,
-            "full_tdd_text": docs.tdd.full_text,
+            # Generic extraction - full text from TDD document
+            "tdd_full_text": docs.tdd.full_text,
+            "tdd_file_name": docs.tdd.file_name,
+            "tdd_table_count": docs.tdd.table_count,
+            # Include tables separately for structured data
+            "tdd_tables": [t.model_dump() for t in docs.tdd.tables],
         }
 
     def _context_for_jira_stories(self, docs: ProjectDocuments) -> Dict[str, Any]:
         """
         Context for Jira Stories Agent
 
-        Needs: Existing story formats, task breakdowns for story generation
-        Source: Jira stories document + Estimation task breakdown
+        Needs: Existing story formats, estimation data for story generation
+        Source: TDD full text + Jira stories full text + Estimation full text
         """
         return {
-            "epic_description": docs.tdd.epic_description,
-            "existing_stories": [s.model_dump() for s in docs.jira_stories.stories],
-            "task_breakdown": [t.model_dump() for t in docs.estimation.task_breakdown],
-            "total_dev_points": docs.estimation.total_dev_points,
-            "total_qa_points": docs.estimation.total_qa_points,
+            # Generic extraction - full text from TDD document
+            "tdd_full_text": docs.tdd.full_text,
+            "tdd_file_name": docs.tdd.file_name,
+            # Generic extraction - full text from Jira stories Excel
+            "jira_stories_full_text": docs.jira_stories.full_text,
+            "jira_stories_file_name": docs.jira_stories.file_name,
+            # Generic extraction - full text from estimation Excel
+            "estimation_full_text": docs.estimation.full_text,
         }

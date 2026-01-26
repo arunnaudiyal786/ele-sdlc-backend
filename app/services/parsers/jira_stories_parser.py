@@ -1,14 +1,14 @@
 """
 Jira Stories Parser
 
-Parses jira_stories.xlsx files for reference stories.
-Extracts existing Jira stories to use as templates.
+Generic Excel text extractor for LLM context.
+Extracts all text content from Jira stories Excel files without schema assumptions.
 """
 
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -18,145 +18,140 @@ logger = logging.getLogger(__name__)
 
 # ===== Pydantic Models =====
 
-class JiraStory(BaseModel):
-    """Individual Jira story"""
 
-    jira_id: str = Field(..., description="Jira story ID (e.g., INV-1001)")
-    description: str = Field(..., description="User story description")
-    story_points: Optional[int] = Field(None, description="Story points if available")
-    priority: Optional[str] = Field(None, description="Priority (High, Medium, Low)")
-    status: Optional[str] = Field(None, description="Status (To Do, In Progress, Done)")
+class SheetContent(BaseModel):
+    """Extracted content from a single sheet"""
+
+    sheet_name: str = Field(..., description="Name of the Excel sheet")
+    text_content: str = Field("", description="Flat text extracted from the sheet")
+    row_count: int = Field(0, description="Number of data rows")
+    column_names: List[str] = Field(default_factory=list, description="Column headers")
 
 
 class JiraStoriesDocument(BaseModel):
-    """Complete Jira stories document"""
+    """Generic extracted document structure"""
 
-    project_id: str = Field(..., description="Project ID")
-    stories: List[JiraStory] = Field(default_factory=list, description="List of existing stories")
+    project_id: str = Field(..., description="Project ID from folder name")
+    file_name: str = Field(..., description="Source file name")
+    sheet_count: int = Field(0, description="Number of sheets in workbook")
+    sheets: List[SheetContent] = Field(default_factory=list, description="Content per sheet")
+    full_text: str = Field("", description="All sheets combined as flat text for LLM")
 
 
 # ===== Parser Class =====
 
+
 class JiraStoriesParser:
-    """Parse jira_stories.xlsx into structured JiraStoriesDocument"""
+    """Generic Excel parser - extracts all text without schema assumptions"""
 
     async def parse(self, jira_path: Path) -> JiraStoriesDocument:
         """
-        Parse Jira stories Excel file
+        Parse any Jira stories Excel file into flat text format.
 
         Args:
-            jira_path: Path to jira_stories.xlsx file
+            jira_path: Path to Excel file (.xlsx, .xls)
 
         Returns:
-            JiraStoriesDocument with extracted stories
+            JiraStoriesDocument with extracted text from all sheets
 
         Raises:
             FileNotFoundError: If file doesn't exist
-            ValueError: If parsing fails
+            ValueError: If file cannot be parsed
         """
         if not jira_path.exists():
-            raise FileNotFoundError(f"Jira stories file not found: {jira_path}")
+            raise FileNotFoundError(f"File not found: {jira_path}")
 
-        logger.info(f"Parsing jira stories: {jira_path.name}")
+        logger.info(f"Parsing Jira stories file: {jira_path.name}")
 
-        # Extract project ID
-        project_id = self._extract_project_id(jira_path)
-
-        # Load Excel file
-        # Try "Jira Stories" sheet first, fallback to first sheet
         try:
-            df = pd.read_excel(jira_path, sheet_name="Jira Stories")
-        except Exception:
-            logger.warning("'Jira Stories' sheet not found, using first sheet")
-            df = pd.read_excel(jira_path, sheet_name=0)
+            xl = pd.ExcelFile(jira_path)
+        except Exception as e:
+            raise ValueError(f"Failed to open Excel file: {e}")
 
-        # Parse stories
-        stories = self._parse_stories(df)
+        logger.info(f"Found {len(xl.sheet_names)} sheets: {xl.sheet_names}")
 
-        logger.info(f"Parsed {len(stories)} Jira stories")
+        project_id = self._extract_project_id(jira_path)
+        sheets: List[SheetContent] = []
+        all_text_parts: List[str] = []
+
+        for sheet_name in xl.sheet_names:
+            sheet_content = self._extract_sheet_text(jira_path, sheet_name)
+            sheets.append(sheet_content)
+
+            # Add to combined text with sheet header
+            if sheet_content.text_content.strip():
+                all_text_parts.append(f"=== {sheet_name} ===\n{sheet_content.text_content}")
+
+        full_text = "\n\n".join(all_text_parts)
+
+        logger.info(
+            f"Extracted {len(sheets)} sheets, "
+            f"total {len(full_text)} characters"
+        )
 
         return JiraStoriesDocument(
             project_id=project_id,
-            stories=stories,
+            file_name=jira_path.name,
+            sheet_count=len(sheets),
+            sheets=sheets,
+            full_text=full_text,
         )
 
-    def _extract_project_id(self, jira_path: Path) -> str:
-        """Extract project ID from file path"""
-        folder_name = jira_path.parent.name
+    def _extract_sheet_text(self, file_path: Path, sheet_name: str) -> SheetContent:
+        """
+        Extract all text from a single sheet as flat text.
+
+        Each row becomes a line with cell values separated by " | ".
+        Empty cells are skipped.
+        """
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+        except Exception as e:
+            logger.warning(f"Failed to read sheet '{sheet_name}': {e}")
+            return SheetContent(sheet_name=sheet_name)
+
+        if df.empty:
+            return SheetContent(sheet_name=sheet_name)
+
+        # Extract column names from first row (if it looks like headers)
+        first_row = df.iloc[0] if len(df) > 0 else pd.Series()
+        column_names = [str(v) for v in first_row.values if pd.notna(v) and str(v).strip()]
+
+        # Convert all cells to text, row by row
+        text_lines: List[str] = []
+
+        for _, row in df.iterrows():
+            # Get non-empty cell values
+            cell_values = []
+            for val in row.values:
+                if pd.notna(val):
+                    text = str(val).strip()
+                    if text and text.lower() != "nan":
+                        cell_values.append(text)
+
+            if cell_values:
+                text_lines.append(" | ".join(cell_values))
+
+        return SheetContent(
+            sheet_name=sheet_name,
+            text_content="\n".join(text_lines),
+            row_count=len(text_lines),
+            column_names=column_names,
+        )
+
+    def _extract_project_id(self, file_path: Path) -> str:
+        """Extract project ID from folder name or file name"""
+        # Try folder name first (e.g., PRJ-001)
+        folder_name = file_path.parent.name
         match = re.match(r"(PRJ-\d+)", folder_name)
         if match:
             return match.group(1)
+
+        # Try file name
+        file_stem = file_path.stem
+        match = re.match(r"(PRJ-\d+)", file_stem)
+        if match:
+            return match.group(1)
+
+        # Fall back to folder name
         return folder_name
-
-    def _parse_stories(self, df: pd.DataFrame) -> List[JiraStory]:
-        """Parse stories from DataFrame"""
-        stories = []
-
-        # Normalize column names to lowercase
-        df.columns = [str(col).lower().strip() for col in df.columns]
-
-        # Find key columns
-        id_col = self._find_column(df, ["jiraid", "jira_id", "story_id", "id", "key"])
-        desc_col = self._find_column(df, ["jira_description", "description", "summary", "story"])
-        points_col = self._find_column(df, ["story_points", "story points", "points"])
-        priority_col = self._find_column(df, ["priority"])
-        status_col = self._find_column(df, ["status"])
-
-        if not id_col or not desc_col:
-            logger.warning("Could not find ID or description columns in Jira stories")
-            return stories
-
-        # Parse each row
-        for _, row in df.iterrows():
-            jira_id = str(row[id_col]).strip()
-            description = str(row[desc_col]).strip()
-
-            # Skip empty rows
-            if not jira_id or jira_id == "nan" or not description or description == "nan":
-                continue
-
-            # Extract optional fields
-            story_points = None
-            if points_col:
-                try:
-                    points_val = row[points_col]
-                    if pd.notna(points_val):
-                        story_points = int(float(points_val))
-                except (ValueError, TypeError):
-                    pass
-
-            priority = None
-            if priority_col:
-                priority = str(row[priority_col]).strip()
-                if priority == "nan":
-                    priority = None
-
-            status = None
-            if status_col:
-                status = str(row[status_col]).strip()
-                if status == "nan":
-                    status = None
-
-            story = JiraStory(
-                jira_id=jira_id,
-                description=description,
-                story_points=story_points,
-                priority=priority,
-                status=status,
-            )
-            stories.append(story)
-
-        return stories
-
-    def _find_column(self, df: pd.DataFrame, keywords: List[str]) -> Optional[str]:
-        """Find column by keywords (case insensitive)"""
-        df_cols = [str(col).lower() for col in df.columns]
-
-        for keyword in keywords:
-            for col in df_cols:
-                if keyword in col:
-                    # Return original column name
-                    col_idx = df_cols.index(col)
-                    return df.columns[col_idx]
-
-        return None

@@ -119,7 +119,7 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         """Save the raw estimation sheet data from parser output for audit trail.
 
         Saves two files:
-        1. estimation_sheet_raw.json - Complete parsed estimation documents from each project
+        1. estimation_sheet_raw.json - Full text extraction from each project's estimation Excel
         2. estimation_context.json - Filtered context assembled for the agent
 
         Args:
@@ -129,24 +129,20 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         """
         subfolder = "step3_agents/agent_estimation_effort"
 
-        # Save raw estimation sheet data from parser output
-        # This contains the complete parsed estimation.xlsx content for each project
+        # Save raw extraction data (generic full text extraction)
         raw_estimation_data = {}
         for project_id, docs in loaded_docs.items():
             raw_estimation_data[project_id] = {
                 "project_id": project_id,
-                "project_name": docs.tdd.project_name,
-                "epic_description": docs.tdd.epic_description,
-                "estimation_sheet": {
-                    "total_dev_points": docs.estimation.total_dev_points,
-                    "total_qa_points": docs.estimation.total_qa_points,
-                    "task_breakdown": [t.model_dump() for t in docs.estimation.task_breakdown],
-                    "assumptions_and_risks": docs.estimation.assumptions_and_risks,
-                    "sizing_guidelines": docs.estimation.sizing_guidelines,
-                    "budget_summary": docs.estimation.budget_summary,
-                    "estimate_summary": docs.estimation.estimate_summary,
-                    # Include all sheets for complete visibility
-                    "all_sheets": docs.estimation.all_sheets,
+                "tdd_extraction": {
+                    "file_name": docs.tdd.file_name,
+                    "full_text": docs.tdd.full_text,
+                },
+                "estimation_extraction": {
+                    "file_name": docs.estimation.file_name,
+                    "sheet_count": docs.estimation.sheet_count,
+                    "full_text": docs.estimation.full_text,
+                    "sheets": [s.model_dump() for s in docs.estimation.sheets],
                 },
             }
 
@@ -172,15 +168,10 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
         return "\n".join(lines) if lines else "No historical data."
 
     def _format_estimation_context(self, context: Dict[str, Any]) -> str:
-        """Format filtered estimation context for LLM prompt.
+        """Format estimation context for LLM prompt.
 
-        This method formats the context assembled by ContextAssembler, which includes:
-        - Only impacted modules (not full TDD module_list)
-        - Only estimation data from selected historical matches
-
-        Supports two estimation formats:
-        1. NEW FORMAT: Single "Scope Estimation" sheet with total_points (no DEV/QA split)
-        2. LEGACY FORMAT: Separate dev_points/qa_points columns
+        Uses generic full text extraction. The LLM reasons about the raw
+        text content without schema assumptions.
 
         Args:
             context: Context dict with structure:
@@ -191,14 +182,12 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
                             "project_id": str,
                             "project_name": str,
                             "relevant_data": {
-                                "epic_description": str,
                                 "impacted_modules": [...],
-                                "total_dev_points": float,
-                                "total_qa_points": float,
-                                "total_points": float,  # New format
-                                "task_breakdown": [...],
-                                "assumptions_and_risks": [...],
-                                "all_sheets": {...}  # Complete Excel data
+                                "tdd_full_text": str,
+                                "tdd_file_name": str,
+                                "estimation_full_text": str,
+                                "estimation_file_name": str,
+                                "estimation_sheet_count": int
                             }
                         }
                     ]
@@ -216,81 +205,35 @@ class EstimationEffortService(BaseComponent[EstimationEffortRequest, EstimationE
 
             lines.append(f"\n## {project_name} ({project_id})")
 
-            # Epic description for context
-            epic_desc = data.get("epic_description", "")
-            if epic_desc:
-                lines.append(f"Epic: {epic_desc[:200]}")
-
-            # Impacted modules (filtered from analysis, not full TDD module_list)
+            # Impacted modules (filtered from analysis)
             impacted_modules = data.get("impacted_modules", [])
             if impacted_modules:
                 lines.append(f"\nImpacted Modules ({len(impacted_modules)}):")
-                for mod in impacted_modules[:10]:  # Limit to 10 most relevant
+                for mod in impacted_modules[:10]:
                     mod_name = mod.get("name", "Unknown")
                     mod_impact = mod.get("impact", "MEDIUM")
-                    mod_reason = mod.get("reason", "")[:150]  # Truncate long reasons
+                    mod_reason = mod.get("reason", "")[:150]
                     lines.append(f"  - {mod_name} ({mod_impact}): {mod_reason}")
 
-            # Historical estimation data - handle both new and legacy formats
-            total_dev = data.get("total_dev_points", 0)
-            total_qa = data.get("total_qa_points", 0)
-            total_points = data.get("total_points", 0)
+            # Full text extraction from TDD document
+            tdd_text = data.get("tdd_full_text", "")
+            tdd_file = data.get("tdd_file_name", "TDD.docx")
+            if tdd_text:
+                lines.append(f"\nTDD Document ({tdd_file}):")
+                lines.append("─" * 40)
+                lines.append(tdd_text)
+                lines.append("─" * 40)
 
-            lines.append(f"\nHistorical Effort:")
-            if total_points > 0 and total_dev == 0 and total_qa == 0:
-                # New format: single total points (no DEV/QA split)
-                lines.append(f"  - Total Points: {total_points}")
-                lines.append("  - (Note: This project uses combined effort points, not split by DEV/QA)")
-            else:
-                # Legacy format: separate DEV/QA points
-                lines.append(f"  - Dev Points: {total_dev}")
-                lines.append(f"  - QA Points: {total_qa}")
-                lines.append(f"  - Total: {total_dev + total_qa}")
+            # Full text extraction from estimation Excel
+            estimation_text = data.get("estimation_full_text", "")
+            estimation_file = data.get("estimation_file_name", "estimation.xlsx")
+            sheet_count = data.get("estimation_sheet_count", 0)
 
-            # Task/Scope breakdown - handle both formats
-            task_breakdown = data.get("task_breakdown", [])
-            if task_breakdown:
-                lines.append(f"\nScope Items (showing {min(10, len(task_breakdown))} of {len(task_breakdown)}):")
-                for task in task_breakdown[:10]:
-                    desc = task.get("task_description", "")[:100]
-                    total_pts = task.get("total_points", 0)
-                    dev = task.get("dev_points", 0)
-                    qa = task.get("qa_points", 0)
-                    notes = task.get("notes", "")
-
-                    if total_pts > 0 and dev == 0 and qa == 0:
-                        # New format
-                        lines.append(f"  - {desc}: {total_pts} points")
-                        if notes:
-                            # Include subtasks/notes (first 200 chars)
-                            lines.append(f"    Details: {notes[:200]}")
-                    else:
-                        # Legacy format
-                        lines.append(f"  - {desc} (Dev: {dev}, QA: {qa})")
-
-            # Assumptions and risks (if available)
-            assumptions = data.get("assumptions_and_risks", [])
-            if assumptions:
-                lines.append(f"\nKey Assumptions/Risks (showing {min(3, len(assumptions))}):")
-                for assumption in assumptions[:3]:
-                    lines.append(f"  - {assumption[:150]}")
-
-            # Sizing guidelines (if available)
-            sizing = data.get("sizing_guidelines", {})
-            if sizing:
-                lines.append(f"\nSizing Guidelines:")
-                for key, value in list(sizing.items())[:5]:
-                    lines.append(f"  - {key}: {value}")
-
-            # Include raw sheet data for complete context
-            all_sheets = data.get("all_sheets", {})
-            if all_sheets:
-                lines.append(f"\nComplete Estimation Sheet Data:")
-                for sheet_name, records in all_sheets.items():
-                    lines.append(f"\n  Sheet: {sheet_name}")
-                    for i, record in enumerate(records[:10]):  # Limit to 10 rows per sheet
-                        record_str = " | ".join(f"{k}: {v}" for k, v in record.items() if v)
-                        lines.append(f"    Row {i+1}: {record_str[:200]}")
+            if estimation_text:
+                lines.append(f"\nHistorical Estimation Data ({estimation_file}, {sheet_count} sheets):")
+                lines.append("─" * 40)
+                lines.append(estimation_text)
+                lines.append("─" * 40)
 
         return "\n".join(lines) if lines else "No estimation data available."
 
