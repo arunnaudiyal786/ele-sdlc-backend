@@ -263,7 +263,15 @@ cd "$SCRIPT_DIR/ele-sdlc-backend"
 if [ -f "requirements.txt" ]; then
     echo -e "      ${ARROW} Installing backend dependencies..."
     echo -e "      ${DIM}This may take a few minutes...${NC}"
-    pip install --quiet -r requirements.txt
+
+    # Use uv if available (faster), otherwise fall back to pip
+    if command -v uv &> /dev/null; then
+        echo -e "      ${CHECK} Using ${CYAN}uv${NC} for faster installation"
+        uv pip install -r requirements.txt
+    else
+        echo -e "      ${WARN} uv not found, using pip ${DIM}(install uv for faster installs: pip install uv)${NC}"
+        pip install --quiet -r requirements.txt
+    fi
     echo -e "      ${CHECK} Backend dependencies installed"
 else
     echo -e "      ${CROSS} requirements.txt not found"
